@@ -48,9 +48,32 @@ if missing_dependencies:
         "Following packages are required but missing in the Python distribution: {}".format(missing_dependencies))
 del hard_dependencies, dependency, missing_dependencies
 
-print('MLToolkit=={}'.format(__version__.strip()))
+from datetime import datetime
+import gc
+import traceback
+import gc
+import os
+from timeit import default_timer as timer
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+import warnings
+warnings.filterwarnings("ignore")
 
+# Package scripts
 from MLToolkit.etl import *
 from MLToolkit.explore import *
-#from MLToolkit.model import *
-#from MLToolkit.deploy import *
+from MLToolkit.model import *
+from MLToolkit.matrics import *
+
+print('MLToolkit=={}'.format(__version__.strip()))
+###############################################################################
+#                           SET DISPLAY ENVIRONMENT                           #
+###############################################################################
+pd.set_option("display.max_columns",1000)
+pd.set_option("display.max_rows",500)
+pd.set_option('expand_frame_repr', False)
+pd.set_option('large_repr', 'truncate')
+pd.set_option('precision', 5)
+###############################################################################
