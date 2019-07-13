@@ -5,6 +5,8 @@
 
 MLToolkit (mltk) is a Python package providing a set of user-friendly functions to help building machine learning models in data science research, teaching or production focused projects. 
 
+<img src="MLToolkit/image/MLTKProcess.png" height="200">
+
 ## Introduction
 MLToolkit supports all stages of the machine learning application development process.
 
@@ -206,6 +208,7 @@ ConfusionMatrixRow
 ```
 ### Deployment
 Simplified MLToolkit ETL pipeline for scoring and model re-building. (Need to customoze based on the project)
+<img src="MLToolkit/image/MLTKServing.png" height="400">
 ```python
 def ETL(DataFrame):
     # Add ID column
