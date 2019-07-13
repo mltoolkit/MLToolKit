@@ -263,6 +263,30 @@ SampleDataset = mltk.score_dataset(SampleDataset, MLModelObject, edges=None, sco
 
 Robustnesstable1 = mltk.robustness_table(ResultsSet=SampleDataset, class_variable=targetVariable, score_variable=score_variable,  score_label=score_label, show_plot=True)
 ```
+### JSON Input for scoring
+
+Records Format for single or fewer number if records
+```json
+[{
+	"ID": "A001",
+	"age": 32,
+	"workclass": "Private",
+	"education": "Doctorate",
+	"occupation": "Prof-specialty",
+	"sex": "Female",
+	"hoursperweek": 40,
+	"nativecountry": "USA"
+},]
+```
+
+Split Format for mulltiple records
+```json
+{
+	"columns":["ID","age","education","hoursperweek","nativecountry","occupation","sex","workclass"],
+	"data":[["A001",32,"Doctorate",40,"USA","Prof-specialty","Female","Private"],]
+}
+```
+
 ## License
 ```
 Copyright 2019 Sumudu Tennakoon
