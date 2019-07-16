@@ -1,11 +1,11 @@
 # MLToolkit 
 ## Current release: PyMLToolkit [v0.1.4]
 
-<img src="https://github.com/sptennak/MLToolkit/blob/master/MLToolkit.png" height="200">
+<img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit.png" height="200">
 
 MLToolkit (mltk) is a Python package providing a set of user-friendly functions to help building machine learning models in data science research, teaching or production focused projects. 
 
-<img src="https://github.com/sptennak/MLToolkit/blob/master/MLToolkit/image/MLTKProcess.png" height="200">
+<img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit/image/MLTKProcess.png" height="200">
 
 ## Introduction
 MLToolkit supports all stages of the machine learning application development process.
@@ -24,7 +24,7 @@ pip install pymltoolkit --no-dependencies
 - Data Extraction (SQL, Flatfiles, etc.)
 - Exploratory Data Analysis (statistical summary, univariate analysis, etc.)
 - Feature Engineering
-- Model Building
+- Model Building (Currently supported for binary classification only)
 - Hyper Parameter Tuning [in development for v0.2]
 - Model Performance Analysis and Comparison Between Models
 - Auto ML (automated machine learning) [in development for v0.2]
@@ -33,8 +33,9 @@ pip install pymltoolkit --no-dependencies
 ## Supported Machine Learning Algorithms/Packages
 - RandomForestClassifier: scikit-learn
 - LogisticRegression: statsmodels
-- Deep Feed Forward Neural Network (DFF): Tensorflow
-- Convlutional Neural Network (CNN): Tensorflow
+- Deep Feed Forward Neural Network (DFF): tensorflow
+- Convlutional Neural Network (CNN): tensorflow
+- Gradient Boost : catboost
 - ... More models will be added in the future releases ...
 
 ## Usage
@@ -230,6 +231,24 @@ model_parameters = {'MLAlgorithm':'NN',
                    'metrics':['accuracy'],
                    'architecture':SimpleDFF_architecture} 
 ```
+CatBoost [avaiable in v0.1.5]
+```python
+model_parameters = {'MLAlgorithm':'CBST',
+                    'NTrees': 500,
+                    'MaxDepth':10,
+                    'LearningRate':0.7,
+                    'LossFunction':'Logloss',#crossEntropy
+                    'EvalMatrics':'Accuracy',
+                    'Imbalanced':False,
+                    'TaskType':'GPU',
+                    'Processors':2,
+                    'UseBestModel':True}
+
+CBSTModel = mltk.build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, targetVariable, 
+                 model_attributes, sample_attributes, model_parameters, score_parameters, 
+                          return_model_object=True, show_results=False, show_plot=True)
+
+```
 
 ### Build Model
 ```python
@@ -242,11 +261,14 @@ print(RFModel.model_interpretation['ModelSummary'])
 print(RFModel.model_evaluation['AUC'])
 print(RFModel.model_evaluation['RobustnessTable'])
 
+RFModel.plot_eval_matrics(comparison=False)
+```
+
+Save model
+```python
 saveFilePath = '{}.pkl'.format(RFModel.get_model_id())
 mltk.save_model(RFModel, saveFilePath)
 
-# Save model
-RFModel.plot_eval_matrics(comparison=False)
 ```
 
 ```
@@ -266,8 +288,17 @@ DataSet          0.00000         0.99967      2.33167e-01         6513         1
 ```
 
 ### Evaluate Model
+
 ```python
-TestDataset = mltk.score_dataset(TestDataset, RFModel, edges=None, score_label=None, fill_missing=0)
+# Plot model performance curves
+RFModel.plot_eval_matrics(comparison=True)
+LGRModel.plot_eval_matrics(comparison=True)
+NNModel.plot_eval_matrics(comparison=True)
+CBSTModel.plot_eval_matrics(comparison=True)
+```
+
+```python
+TestDataset = mltk.score_processed_dataset(TestDataset, RFModel, edges=None, score_label=None, fill_missing=0)
 score_variable = RFModel.get_score_variable()
 score_label = RFModel.get_score_label()
 
@@ -279,16 +310,33 @@ ConfusionMatrix = mltk.confusion_matrix(TestDataset, actual_variable=targetVaria
 print(ConfusionMatrix)
 ```
 
-Comparing Models and Thresholds
+Compare AUC [avaiable in v0.1.5]
+```
+Models = [LGRModel, RFModel, CBSTModel, NNModel]
+ModelsComp = mltk.model_guages_comparison(Models)
+ModelsComp.style.background_gradient(cmap='RdYlGn').set_precision(3)
+```
+
+Comparing Models and Probability Thresholds
 ```python
-Models = [LGRModel, RFModel, NNModel]
+Models = [LGRModel, RFModel, CBSTModel, NNModel]
 thresholds=[0.7, 0.8, 0.9]
 ConfusionMatrixComparison = mltk.confusion_matrix_comparison(TestDataset, Models, thresholds, score_variable=None, show_plot=True)
 ConfusionMatrixComparison.style.background_gradient(cmap='RdYlGn').set_precision(3)
 ```
 
+Comparing Models and Threshold Score (1-10 Scale) [avaiable in v0.1.5]
+```python
+Models = [LGRModel, RFModel, CBSTModel, NNModel]
+thresholds=[7, 8, 9]
+ConfusionMatrixComparison = mltk.confusion_matrix_comparison(TestDataset, Models, thresholds, score_variable=score_label, show_plot=True)
+ConfusionMatrixComparison.style.background_gradient(cmap='RdYlGn').set_precision(3)
+```
+
 ### Deployment
-Simplified MLToolkit ETL pipeline for scoring and model re-building. (Need to customoze based on the project)
+Simplified MLToolkit ETL pipeline for scoring and model re-building (Need to customize based on the project).
+<img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit/image/MLTKServing.png" height="300">
+
 ```python
 def ETL(DataFrame):
     # Add ID column
@@ -297,51 +345,41 @@ def ETL(DataFrame):
     # Clean column names
     DataFrame = mltk.clean_column_names(DataFrame, replace='')
     input_columns = list(DataFrame.columns)
-	
+
     # Excising valiables to model
     targetVariable = 'HighIncome'
-    categoryVariables = set({'sex', 'nativecountry', 'race', 'occupation', 'workclass', 'maritalstatus', 'relationship'}) & set(DataFrame.columns)
-    binaryVariables = set({}) & set(DataFrame.columns)
+    categoryVariables = ['sex', 'nativecountry', 'race', 'occupation', 'workclass', 'maritalstatus', 'relationship']
+    binaryVariables = []
     
-    # Check if target variable exists (fill the column with None in scoring)
-    if not targetVariable in DataFrame.columns:
-        DataFrame[targetVariable]=None
-    
-    # Create more Binary variables
+    # List to Create more Binary variables
     conditions = [{'bin_variable':'CapitalGainPositive', 'str_condition':"capitalgain>0"},
                   {'bin_variable':'CapitalLossPositive', 'str_condition':"capitalloss>0"}
                   ]
-    DataFrame, bin_variables_ = mltk.create_binary_variables_set(DataFrame, conditions, return_variable=True)
-    binaryVariables.update(bin_variables_)
-                  
-    # Create more Catergorical variables
+    
+    # List to Create more Catergorical variables
     buckets = [{'variable':'age', 'str_labels':['0', '20', '30', '40', '50', '60', 'INF']},
                {'variable':'educationnum', 'str_labels':['1', '4', '6', '8', '10', '13', '16']},
                {'variable':'hoursperweek', 'str_labels':['0', '20', '40', '50', '60', '80', 'INF']}
-              ]    
-    DataFrame, category_variables_ = mltk.create_categorical_variables_set(DataFrame, buckets, return_variable=True)
-    categoryVariables.update(category_variables_)
-        
-    #Finalize variables lists
-    identifierColumns = ['ID']
-    categoryVariables=list(categoryVariables)
-    binaryVariables=list(binaryVariables)
-    targetVariable = targetVariable
-
+              ] 
+    
+    # List to Merge categorical values
+    groups = [{'variable':'maritalstatus', 'group_name':'Married', 'values':["Married-civ-spouse", "Married-spouse-absent", "Married-AF-spouse"]}]
+    
+    DataFrame, categoryVariables, binaryVariables, targetVariable = mltk.setup_variables(DataFrame, target_variable=targetVariable, category_variables=categoryVariables, binary_variables=binaryVariables, conditions=conditions, buckets=buckets, groups=groups)
+    
     # Create One Hot Encoded Variables
     DataFrame, featureVariables, targetVariable = mltk.to_one_hot_encode(DataFrame, category_variables=categoryVariables, binary_variables=binaryVariables, target_variable=targetVariable)
-    
+
     return DataFrame, input_columns
 ```
 
 Scoring
 ```python
-MLModelObject = mltk.load_object(r'INCOMELEVELLGR20190704224750.pkl')
+MLModelObject = mltk.load_model(saveFilePath)
 SampleDataset = pd.read_csv(r'test.csv')
 SampleDataset = ETL(SampleDataset)
 
-SampleDataset = mltk.score_dataset(SampleDataset, MLModelObject, edges=None, score_label=None, fill_missing=0)
-
+SampleDataset = mltk.score_processed_dataset(SampleDataset, MLModelObject, edges=None, score_label=None, fill_missing=0)
 Robustnesstable1 = mltk.robustness_table(ResultsSet=SampleDataset, class_variable=targetVariable, score_variable=score_variable,  score_label=score_label, show_plot=True)
 ```
 
@@ -433,10 +471,10 @@ limitations under the License.
 - 2019-03-20 [v0.1.0]: Developed and published initial version of model building and serving framework for IBM Coursera Advanced Data Science Professional Certificate Capstone Project. (https://github.com/sptennak/IBM-Coursera-Advanced-Data-Science-Capstone).
 - 2019-07-02 [v0.1.2]: First release of the PyMLToolkit Python package, a collection of clases and functions facilitating end-to-end machine learning model building and serving over RESTful API.
 - 2019-07-04 [v0.1.3]: Minor bug fixes.
-- 2019-07-14 [v0.1.4]: Improved documentation, Enhancements and Minor bug fixes.
+- 2019-07-14 [v0.1.4]: Improved documentation, Integrated TensorFlow Models, Enhancements and Minor bug fixes.
 
 ## Future Release Plan
-- TBD [v1.0.5]: Add image classification model Deployment, Enhancements and Minor bug fixes.
+- TBD [v1.0.5]: Integrated CatBoost Models, Integrate image classification model Deployment, Enhancements and Minor bug fixes.
 - 2019-12-31 [v0.1.6]: Comprehensive documentation, Major bug-fix version of the initial release with some enhancements.
 - [v0.2.0]: Imporved model serving frameework, support more machine learning algorithms and deep learning.
 - [v0.3.0]: Imporved scalability and performance, Hyper parameter tuning, and Automated Machine Learning.
