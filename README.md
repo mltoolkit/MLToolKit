@@ -1,5 +1,5 @@
 # MLToolkit 
-## Current release: PyMLToolkit [v0.1.4]
+## Current release: PyMLToolkit [v0.1.5]
 
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit.png" height="200">
 
@@ -27,8 +27,10 @@ pip install pymltoolkit --no-dependencies
 - Model Building (Currently supported for binary classification only)
 - Hyper Parameter Tuning [in development for v0.2]
 - Model Performance Analysis and Comparison Between Models
+- Model Building UI [in development for v0.2]
+- ML Model Building Project [in development for v0.2]
 - Auto ML (automated machine learning) [in development for v0.2]
-- Model Deploymet and Serving [will be imporved for v0.2]
+- Model Deploymet and Serving [included, will be imporved for v0.2]
 
 ## Supported Machine Learning Algorithms/Packages
 - RandomForestClassifier: scikit-learn
@@ -77,7 +79,7 @@ import numpy as np
 import pandas as pd
 import mltk as mltk
 
-Data = pd.read_csv(r'incomedata.csv')
+Data = mltk.read_data_csv(file=r'C:\Projects\Data\incomedata.csv')
 Data = mltk.clean_column_names(Data, replace='')
 Data = mltk.add_identity_column(Data, id_label='ID', start=1, increment=1)
 DataStats = mltk.data_description(Data)
@@ -113,8 +115,8 @@ categoryVariables = set({'sex', 'nativecountry', 'race', 'occupation', 'workclas
 print(mltk.category_lists(Data, list(categoryVariables)))
 
 # Merge unique categorical values
-groups = [{'variable':'maritalstatus', 'group_name':'Married', 'values':["Married-civ-spouse", "Married-spouse-absent", "Married-AF-spouse"]}]
-Data = mltk.merge_categories(Data, groups)
+category_merges = [{'variable':'maritalstatus', 'category_variable':'maritalstatus', 'group_value':'Married', 'values':["Married-civ-spouse", "Married-spouse-absent", "Married-AF-spouse"]}]
+Data = mltk.merge_categories(Data, category_merges)
 
 # Show Frequency distribution of categorical variable
 sourceVariable='maritalstatus'
@@ -126,15 +128,19 @@ mltk.variable_responses(Data, variables=categoryVariables, target_variable=targe
 ```
 
 ```python
+# Transform numeric variable
+transformations = [{ "variable":"age", "to": "normalizedage", "operation":"normalize", "parameters":{"method":"zscore"}}]
+Data, transformed_variables = mltk.create_transformed_variables(Data, variable_operations=transformations, return_variables=True)
+
 # Create Categorical Variables from continious variables
 sourceVariable='age'
 table = mltk.histogram(Data, sourceVariable, n_bins=10, orientation='vertical', show_plot=True)
 print(table)
 
 # Divide to categories
-labels = ['0', '20', '30', '40', '50', '60', 'INF']
-Data, groupVariable = mltk.numeric_to_category(DataFrame=Data, variable=sourceVariable, str_labels=labels, right_inclusive=True, print_output=False, return_variable=True)
-mltk.plot_variable_response(DataFrame=Data, variable=groupVariable, class_variable=targetVariable)
+buckets = [{'variable':sourceVariable, 'category_variable':None,'str_labels':['0', '20', '30', '40', '50', '60', 'INF'], 'right_inclusive':True}]
+Data, categoryVariable = mltk.create_categorical_variables(Data, buckets, return_variables=True)
+mltk.plot_variable_response(DataFrame=Data, variable=categoryVariable, class_variable=targetVariable)
 ```
 ```
             Counts  HighIncome  CountsFraction%  ResponseFraction%  ResponseRate%
@@ -145,7 +151,27 @@ ageGRP
 4_(40,50]     6983        2655         21.44590           33.86048       38.02091
 5_(50,60]     4128        1547         12.67774           19.72963       37.47578
 6_(60,INF)    2332         551          7.16194            7.02716       23.62779
-TOTAL        32561        7841        100.00000          100.00000            NaN
+TOTAL        32561        7841        100.00000          100.00000        0.24081
+```
+```python
+# Divide to categories using JSON input
+create_variable_task_dict = """
+{
+	"type":"buckets",
+	"variable_class": "cat",
+	"include":true,
+	"show_output":false,
+	"rule_set":[
+		{
+			"variable":"hoursperweek", 
+			"category_variable":null, 
+			"str_labels":["0", "20", "40", "50", "60", "80", "INF"]
+		}
+	]
+}
+"""
+Data, category_variable = create_variable_task(Data, create_variable_task_dict=create_variable_task_dict)
+
 ```
 
 ```python
@@ -231,7 +257,7 @@ model_parameters = {'MLAlgorithm':'NN',
                    'metrics':['accuracy'],
                    'architecture':SimpleDFF_architecture} 
 ```
-CatBoost [avaiable in v0.1.5]
+CatBoost
 ```python
 model_parameters = {'MLAlgorithm':'CBST',
                     'NTrees': 500,
@@ -243,32 +269,30 @@ model_parameters = {'MLAlgorithm':'CBST',
                     'TaskType':'GPU',
                     'Processors':2,
                     'UseBestModel':True}
-
-CBSTModel = mltk.build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, targetVariable, 
-                 model_attributes, sample_attributes, model_parameters, score_parameters, 
-                          return_model_object=True, show_results=False, show_plot=True)
-
 ```
 
 ### Build Model
 ```python
-RFModel = mltk.build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, targetVariable, 
-                 model_attributes, sample_attributes, model_parameters, score_parameters, 
-                          return_model_object=True, show_results=False, show_plot=True)
+XModel = mltk.build_ml_model(TrainDataset, ValidateDataset, TestDataset, 
+                                  model_variables=modelVariables,
+                                  variable_setup = None,
+                                  target_variable=targetVariable,
+                                  model_attributes=model_attributes, 
+                                  sample_attributes=sample_attributes, 
+                                  model_parameters=model_parameters, 
+                                  score_parameters=score_parameters, 
+                                  return_model_object=True, 
+                                  show_results=False, 
+                                  show_plot=True
+                                  )
 
-print(RFModel.model_attributes['ModelID'])
-print(RFModel.model_interpretation['ModelSummary'])
-print(RFModel.model_evaluation['AUC'])
-print(RFModel.model_evaluation['RobustnessTable'])
+print(XModel.model_attributes['ModelID'])
+print(XModel.model_interpretation['ModelSummary'])
+print('ROC AUC: ', XModel.get_auc(curve='roc'))
+print('PRC AUC: ', XModel.get_auc(curve='prc'))
+print(XModel.model_evaluation['RobustnessTable'])
 
-RFModel.plot_eval_matrics(comparison=False)
-```
-
-Save model
-```python
-saveFilePath = '{}.pkl'.format(RFModel.get_model_id())
-mltk.save_model(RFModel, saveFilePath)
-
+XModel.plot_eval_matrics(comparison=False)
 ```
 
 ```
@@ -289,32 +313,40 @@ DataSet          0.00000         0.99967      2.33167e-01         6513         1
 
 ### Evaluate Model
 
+Plot model performance curves
 ```python
-# Plot model performance curves
 RFModel.plot_eval_matrics(comparison=True)
 LGRModel.plot_eval_matrics(comparison=True)
 NNModel.plot_eval_matrics(comparison=True)
 CBSTModel.plot_eval_matrics(comparison=True)
 ```
 
+Area Under Curve (AUC) Comparison
 ```python
-TestDataset = mltk.score_processed_dataset(TestDataset, RFModel, edges=None, score_label=None, fill_missing=0)
+Models = [LGRModel, RFModel, CBSTModel, NNModel]
+ModelsComp = mltk.model_guages_comparison(Models)
+print(ModelsComp)
+```
+
+```
+                           Model  PRC_AUC  ROC_AUC
+0   INCOMELEVELLGR20190728113633  0.71971  0.88926
+1    INCOMELEVELRF20190728113635  0.69348  0.88113
+2  INCOMELEVELCBST20190728113703  0.71507  0.88975
+3    INCOMELEVELNN20190728113641  0.71396  0.88890
+```
+
+Test Model
+```python
 score_variable = RFModel.get_score_variable()
 score_label = RFModel.get_score_label()
 
-Robustnesstable = mltk.robustness_table(ResultsSet=TestDataset, class_variable=targetVariable, score_variable=score_variable,  score_label=score_label, show_plot=True)
+TestDataset = mltk.score_processed_dataset(TestDataset, RFModel, edges=None, score_label=None, fill_missing=0)
 
 threshold = 0.8
 TestDataset = mltk.set_predicted_columns(TestDataset, score_variable, threshold=threshold)
 ConfusionMatrix = mltk.confusion_matrix(TestDataset, actual_variable=targetVariable, predcted_variable='Predicted', labels=[0,1], sample_weight=None, totals=True)
 print(ConfusionMatrix)
-```
-
-Compare AUC [avaiable in v0.1.5]
-```
-Models = [LGRModel, RFModel, CBSTModel, NNModel]
-ModelsComp = mltk.model_guages_comparison(Models)
-ModelsComp.style.background_gradient(cmap='RdYlGn').set_precision(3)
 ```
 
 Comparing Models and Probability Thresholds
@@ -325,7 +357,7 @@ ConfusionMatrixComparison = mltk.confusion_matrix_comparison(TestDataset, Models
 ConfusionMatrixComparison.style.background_gradient(cmap='RdYlGn').set_precision(3)
 ```
 
-Comparing Models and Threshold Score (1-10 Scale) [avaiable in v0.1.5]
+Comparing Models and Threshold Score (1-10 Scale)
 ```python
 Models = [LGRModel, RFModel, CBSTModel, NNModel]
 thresholds=[7, 8, 9]
@@ -333,10 +365,30 @@ ConfusionMatrixComparison = mltk.confusion_matrix_comparison(TestDataset, Models
 ConfusionMatrixComparison.style.background_gradient(cmap='RdYlGn').set_precision(3)
 ```
 
+Set Custom Score Edges
+``` python
+RobustnessTable, ROCCurve, PrecisionRecallCurve, roc_auc, prc_auc = mltk.model_performance_matrics(ResultsSet=TestDataset, target_variable=targetVariable, score_variable=score_variable, quantile_label='Quantile',  quantiles=100, show_plot=True)
+print('ROC AUC', roc_auc)
+print('PRC AUC', prc_auc)
+
+print(RobustnessTable)
+
+# Re-bin score buckets
+edges = [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.95, 1.0]
+LGRModel.set_score_edges(edges)
+```
+
+Save model
+```python
+saveFilePath = '{}.pkl'.format(XModel.get_model_id())
+mltk.save_model(XModel, saveFilePath)
+```
+
 ### Deployment
 Simplified MLToolkit ETL pipeline for scoring and model re-building (Need to customize based on the project).
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit/image/MLTKServing.png" height="300">
 
+Define ETL Function
 ```python
 def ETL(DataFrame):
     # Add ID column
@@ -346,26 +398,112 @@ def ETL(DataFrame):
     DataFrame = mltk.clean_column_names(DataFrame, replace='')
     input_columns = list(DataFrame.columns)
 
-    # Excising valiables to model
-    targetVariable = 'HighIncome'
-    categoryVariables = ['sex', 'nativecountry', 'race', 'occupation', 'workclass', 'maritalstatus', 'relationship']
-    binaryVariables = []
+    variables_setup_dict = """   
+    {
+        "setting":"model",
+
+        "variables": {            
+                "category_variables" : ["sex", "nativecountry", "race", "occupation", "workclass", "maritalstatus", "relationship"],
+                "binary_variables": [],
+                "target_variable":"HighIncome"
+        },
+
+
+        "transform": {
+            "type":"transform",
+            "variable_class": "num",
+            "include":false,
+            "show_output":false,
+            "rule_set": [
+                {
+                    "variable":"age", 
+                    "to": "normalizedage", 
+                    "operation":"normalize", 
+                    "parameters":{"method":"zscore"}
+                },
+                {
+                    "variable":"hoursperweek", 
+                    "to": "normalizedhoursperweek", 
+                    "operation":"normalize", 
+                    "parameters":{"method":"minmaxfs"}
+                }
+            ]
+        },
+
+        "conditions":{
+            "type":"conditions",
+            "variable_class": "bin",
+            "include":true,
+            "show_output":false,
+            "rule_set":[        
+                {
+                    "bin_variable":"CapitalGainPositive", 
+                    "str_condition":"capitalgain>0"
+                },
+
+                {
+                    "bin_variable":"CapitalLossPositive", 
+                    "str_condition":"capitalloss>0"
+                }
+            ]
+        },
+
+        "buckets":{
+            "type":"buckets",
+            "variable_class": "cat",
+            "include":true,
+            "show_output":false,
+            "rule_set":[
+                {
+                    "variable":"age", 
+                    "category_variable":null, 
+                    "str_labels":["0", "20", "30", "40", "50", "60", "INF"]
+                },
+                {
+                    "variable":"educationnum", 
+                    "category_variable":null, 
+                    "str_labels":["1", "4", "6", "8", "10", "13", "16"]
+                },
+                {
+                    "variable":"hoursperweek", 
+                    "category_variable":null, 
+                    "str_labels":["0", "20", "40", "50", "60", "80", "INF"]
+                }
+            ]
+        },
+
+        "category_merges":{
+            "type":"category_merges",
+            "variable_class": "cat",
+            "include":true,
+            "show_output":false,
+            "rule_set":[
+                {
+                    "variable":"maritalstatus", 
+                    "category_variable":"maritalstatus", 
+                    "group_value":"Married", 
+                    "values":["Married-civ-spouse", "Married-spouse-absent", "Married-AF-spouse"]
+                }
+            ]
+        },
+
+        "pair_equality": {
+            "type":"pair_equality",
+            "variable_class": "cat",
+            "include":false,
+            "show_output":false,
+            "rule_set":[
+                {
+                    "variable1":"age", 
+                    "variable2":"hoursperweek",
+                    "category_variable":"TestGroup"
+                }
+            ]
+        }
+    }
+    """    
     
-    # List to Create more Binary variables
-    conditions = [{'bin_variable':'CapitalGainPositive', 'str_condition':"capitalgain>0"},
-                  {'bin_variable':'CapitalLossPositive', 'str_condition':"capitalloss>0"}
-                  ]
-    
-    # List to Create more Catergorical variables
-    buckets = [{'variable':'age', 'str_labels':['0', '20', '30', '40', '50', '60', 'INF']},
-               {'variable':'educationnum', 'str_labels':['1', '4', '6', '8', '10', '13', '16']},
-               {'variable':'hoursperweek', 'str_labels':['0', '20', '40', '50', '60', '80', 'INF']}
-              ] 
-    
-    # List to Merge categorical values
-    groups = [{'variable':'maritalstatus', 'group_name':'Married', 'values':["Married-civ-spouse", "Married-spouse-absent", "Married-AF-spouse"]}]
-    
-    DataFrame, categoryVariables, binaryVariables, targetVariable = mltk.setup_variables(DataFrame, target_variable=targetVariable, category_variables=categoryVariables, binary_variables=binaryVariables, conditions=conditions, buckets=buckets, groups=groups)
+    DataFrame, categoryVariables, binaryVariables, targetVariable = mltk.setup_variables_task(DataFrame, variables_setup_dict)
     
     # Create One Hot Encoded Variables
     DataFrame, featureVariables, targetVariable = mltk.to_one_hot_encode(DataFrame, category_variables=categoryVariables, binary_variables=binaryVariables, target_variable=targetVariable)
@@ -397,7 +535,7 @@ TestInput = """
       "occupation": "Prof-specialty",
       "relationship": "Husband",
       "race": "Asian-Pac-Islander",
-      "sex": "Feale",
+      "sex": "Male",
       "capital-gain": 0,
       "capital-loss": 0,
       "hours-per-week": 40,
@@ -409,21 +547,21 @@ output = mltk.score_records(TestInput, MLModelObject, edges=None, ETL=ETL, retur
 Output
 ```python
 [{'ID': 'A001',
-  'age': 32,
-  'capitalgain': 0,
-  'capitalloss': 0,
-  'education': 'Doctorate',
-  'educationnum': 16,
-  'hoursperweek': 40,
-  'maritalstatus': 'Married',
-  'nativecountry': '?',
-  'occupation': 'Prof-specialty',
-  'race': 'Asian-Pac-Islander',
-  'relationship': 'Husband',
-  'sex': 'Feale',
-  'workclass': 'Private',
-  'Probability': 0.7494862543903595,
-  'Score': 8}]
+ 'age': 32,
+ 'capitalgain': 0,
+ 'capitalloss': 0,
+ 'education': 'Doctorate',
+ 'educationnum': 16,
+ 'hoursperweek': 40,
+ 'maritalstatus': 'Married',
+ 'nativecountry': '?',
+ 'occupation': 'Prof-specialty',
+ 'race': 'Asian-Pac-Islander',
+ 'relationship': 'Husband',
+ 'sex': 'Male',
+ 'workclass': 'Private',
+ 'Probability': 0.6790258814478549,
+ 'Score': 7}]
 ```
 ### JSON Input for scoring
 
@@ -438,14 +576,14 @@ Records Format for single or fewer number of records
 	"sex": "Female",
 	"hoursperweek": 40,
 	"nativecountry": "USA"
-},]
+}]
 ```
 
 Split Format for mulltiple records
 ```json
 {
 	"columns":["ID","age","education","hoursperweek","nativecountry","occupation","sex","workclass"],
-	"data":[["A001",32,"Doctorate",40,"USA","Prof-specialty","Female","Private"],]
+	"data":[["A001",32,"Doctorate",40,"USA","Prof-specialty","Female","Private"]]
 }
 ```
 
@@ -467,16 +605,17 @@ limitations under the License.
 ```
 ## MLToolkit Project Timeline
 - 2018-07-02 [v0.0.1]: Initial set of functions for data exploration, model building and model evaluation was published to Github. (https://github.com/sptennak/MachineLearning).
-- 2018-01-03 [v0.0.2]: Created more functions for data exploration including web scraping and eo spacial data analysis for for IBM Coursera Data Science Capstone Project was published to Github. (https://github.com/sptennak/Coursera_Capstone).
+- 2018-01-03 [v0.0.2]: Created more functions for data exploration including web scraping and geo spacial data analysis for for IBM Coursera Data Science Capstone Project was published to Github. (https://github.com/sptennak/Coursera_Capstone).
 - 2019-03-20 [v0.1.0]: Developed and published initial version of model building and serving framework for IBM Coursera Advanced Data Science Professional Certificate Capstone Project. (https://github.com/sptennak/IBM-Coursera-Advanced-Data-Science-Capstone).
 - 2019-07-02 [v0.1.2]: First release of the PyMLToolkit Python package, a collection of clases and functions facilitating end-to-end machine learning model building and serving over RESTful API.
 - 2019-07-04 [v0.1.3]: Minor bug fixes.
 - 2019-07-14 [v0.1.4]: Improved documentation, Integrated TensorFlow Models, Enhancements and Minor bug fixes.
+- 2019-07-28 [v0.1.5]: Integrated CatBoost Models, Improved model building and serving frameework, support JSON input/output to the ML model bulding and scoring processes, Enhancements and bug fixes.
 
 ## Future Release Plan
-- TBD [v1.0.5]: Integrated CatBoost Models, Integrate image classification model Deployment, Enhancements and Minor bug fixes.
-- 2019-12-31 [v0.1.6]: Comprehensive documentation, Major bug-fix version of the initial release with some enhancements.
-- [v0.2.0]: Imporved model serving frameework, support more machine learning algorithms and deep learning.
+- TBD [v0.1.6]: Integrate image classification model Deployment, UI Preview, ML Model Building Projects, Enhancements and bug fixes.
+- 2019-12-31 [v0.1.7]: Comprehensive documentation, Post implementation evaluation functions, Major bug-fix version of the initial release with finalized enhancements.
+- [v0.2.0]: Imporved model building and serving frameework, UI, support more machine learning algorithms and deep learning.
 - [v0.3.0]: Imporved scalability and performance, Hyper parameter tuning, and Automated Machine Learning.
 - [v0.4.0]: Building continious learning models.
 
@@ -488,3 +627,5 @@ limitations under the License.
 - https://www.statsmodels.org
 - https://matplotlib.org/
 - http://flask.pocoo.org/
+- https://catboost.ai/
+- http://json.org/
