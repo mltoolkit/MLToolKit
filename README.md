@@ -1,5 +1,5 @@
-# MLToolkit 
-## Current release: PyMLToolkit [v0.1.5]
+# MLToolKit 
+## Current release: PyMLToolKit [v0.1.5]
 
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit.png" height="200">
 
