@@ -1,9 +1,9 @@
-# MLToolKit 
-## Current release: PyMLToolKit [v0.1.5]
+# MLToolkit 
+## Current release: PyMLToolkit [v0.1.6]
 
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit.png" height="200">
 
-MLToolkit (mltk) is a Python package providing a set of user-friendly functions to help building machine learning models in data science research, teaching or production focused projects. 
+MLToolkit (mltk) is a Python package providing a set of user-friendly functions to help building end-to-end machine learning models in data science research, teaching or production focused projects. 
 
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit/image/MLTKProcess.png" height="200">
 
@@ -22,11 +22,13 @@ pip install pymltoolkit --no-dependencies
 
 ## Functions
 - Data Extraction (SQL, Flatfiles, etc.)
-- Exploratory Data Analysis (statistical summary, univariate analysis, etc.)
-- Feature Engineering
+- Exploratory Data Analysis (statistical summary, univariate analysis, visulize distributions, etc.)
+- Feature Engineering (Supports numeric, text, date/time. Image data support will integrate in later releases of v0.1)
 - Model Building (Currently supported for binary classification only)
 - Hyper Parameter Tuning [in development for v0.2]
-- Model Performance Analysis and Comparison Between Models
+- Cross Validation (will integrate in later releases of v0.1)
+- Model Performance Analysis and Comparison Between Models.
+- JSON input script for executing model building and scoring tasks.
 - Model Building UI [in development for v0.2]
 - ML Model Building Project [in development for v0.2]
 - Auto ML (automated machine learning) [in development for v0.2]
@@ -127,20 +129,92 @@ table.style.background_gradient(cmap='Greens').set_precision(3)
 mltk.variable_responses(Data, variables=categoryVariables, target_variable=targetVariable, show_output=False, show_plot=True)
 ```
 
+# Variables Manipulations
+```python
+# General form
+{
+	'type':'category'
+	'out_type':'cat',
+	'include':True,
+	'operation':'bucket',
+	'variables': {
+		'source':'age',
+		'destination': None  # None for mult-variable operations, variable1 (for pair operations), variable1a (for pair sequence operation)
+	},
+        'parameters': {
+        'labels_str': ['0', '20', '30', '40', '50', '60', 'INF'],
+        'right_inclusive':True,
+        "default":'OTHER',
+        "null": 'NA'
+    }
+}
+```
+
+```	
+List of Avaiable Transformation
+ |- Date/Numeric Transformations (transform)
+ | |- normalize
+ | |- datepart
+ | |- dateadd
+ |- String Transformation (str_transform)
+ | |- normalize
+ | |- strcount
+ | |- extract
+ |- Multi-variable Operations (operation_mult)
+ | |- expression
+ |- Sequence Order Check (seq_order)
+ | |- seqorder
+ |- Numeric/Date Comparison* (comparison)
+ | |- numdiff
+ | |- ratio
+ | |- datediff
+ |- String Comparison* (str_comparison)
+ | |- levenshtein
+ | |- jaccard
+ | |- ..more to add ..
+ * pair comparison
+ 
+List of Avaiable Discrete Feature Transforms
+|- Binary Variable (condition)
+|- Numeric to Catergory (buckets)
+|- Entity Grouping (dictionary)
+|- Pair Equality/Existance (pair_equality)
+|- Category Merge(category_merge)
+```
+
 ```python
 # Transform numeric variable
-transformations = [{ "variable":"age", "to": "normalizedage", "operation":"normalize", "parameters":{"method":"zscore"}}]
-Data, transformed_variables = mltk.create_transformed_variables(Data, variable_operations=transformations, return_variables=True)
+rule_set = {
+    "operation":"normalize", 
+    'variables': {
+        'source':'age', 
+        'destination':'normalizedage'
+    },
+    "parameters":{"method":"zscore"}
+}
+Data, transformed_variable = mltk.create_transformed_variable_task(Data, rule_set, return_variable=True)
 
 # Create Categorical Variables from continious variables
 sourceVariable='age'
-table = mltk.histogram(Data, sourceVariable, n_bins=10, orientation='vertical', show_plot=True)
+table = mltk.histogram(Data, sourceVariable, n_bins=10, orientation='vertical', density=True, show_plot=True)
 print(table)
 
 # Divide to categories
-buckets = [{'variable':sourceVariable, 'category_variable':None,'str_labels':['0', '20', '30', '40', '50', '60', 'INF'], 'right_inclusive':True}]
-Data, categoryVariable = mltk.create_categorical_variables(Data, buckets, return_variables=True)
-mltk.plot_variable_response(DataFrame=Data, variable=categoryVariable, class_variable=targetVariable)
+rule_set = {   
+    'operation':'bucket',
+    'variables': {
+        'source':'age', 
+        'destination':None
+    },
+    'parameters': {
+        'labels_str': ['0', '20', '30', '40', '50', '60', 'INF'],
+        'right_inclusive':True,
+        "default":'OTHER',
+        "null": 'NA'
+    }
+}
+Data, categoryVariable = mltk.create_categorical_variable_task(Data, rule_set, return_variable=True)
+mltk.variable_response(DataFrame=Data, variable=categoryVariable, target_variable=targetVariable, show_plot=True)
 ```
 ```
             Counts  HighIncome  CountsFraction%  ResponseFraction%  ResponseRate%
@@ -152,26 +226,6 @@ ageGRP
 5_(50,60]     4128        1547         12.67774           19.72963       37.47578
 6_(60,INF)    2332         551          7.16194            7.02716       23.62779
 TOTAL        32561        7841        100.00000          100.00000        0.24081
-```
-```python
-# Divide to categories using JSON input
-create_variable_task_dict = """
-{
-	"type":"buckets",
-	"variable_class": "cat",
-	"include":true,
-	"show_output":false,
-	"rule_set":[
-		{
-			"variable":"hoursperweek", 
-			"category_variable":null, 
-			"str_labels":["0", "20", "40", "50", "60", "80", "INF"]
-		}
-	]
-}
-"""
-Data, category_variable = create_variable_task(Data, create_variable_task_dict=create_variable_task_dict)
-
 ```
 
 ```python
@@ -373,6 +427,12 @@ print('PRC AUC', prc_auc)
 
 print(RobustnessTable)
 
+# Examine cutoffs
+quantiles=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+edges, threshold = mltk.get_score_cutoffs(ResultsSet=TestDataset, quantiles=quantiles, target_variable=targetVariable, score_variable=scoreVariable)
+print('Threshold', threshold)
+print('Edges', edges)
+
 # Re-bin score buckets
 edges = [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.95, 1.0]
 LGRModel.set_score_edges(edges)
@@ -390,7 +450,7 @@ Simplified MLToolkit ETL pipeline for scoring and model re-building (Need to cus
 
 Define ETL Function
 ```python
-def ETL(DataFrame):
+def ETL(DataFrame, variables_setup_dict=None):
     # Add ID column
     DataFrame = mltk.add_identity_column(DataFrame, id_label='ID', start=1, increment=1)
     
@@ -398,110 +458,143 @@ def ETL(DataFrame):
     DataFrame = mltk.clean_column_names(DataFrame, replace='')
     input_columns = list(DataFrame.columns)
 
-    variables_setup_dict = """   
-    {
-        "setting":"model",
+	if variables_setup_dict==None:
+		variables_setup_dict = """   
+		{
+			"setting":"score",
 
-        "variables": {            
-                "category_variables" : ["sex", "nativecountry", "race", "occupation", "workclass", "maritalstatus", "relationship"],
-                "binary_variables": [],
-                "target_variable":"HighIncome"
-        },
+			"variables": {            
+					"category_variables" : ["sex", "race", "occupation", "workclass", "maritalstatus", "relationship"],
+					"binary_variables": [],
+					"target_variable":"HighIncome"
+			},
 
-
-        "transform": {
-            "type":"transform",
-            "variable_class": "num",
-            "include":false,
-            "show_output":false,
-            "rule_set": [
-                {
-                    "variable":"age", 
-                    "to": "normalizedage", 
-                    "operation":"normalize", 
-                    "parameters":{"method":"zscore"}
-                },
-                {
-                    "variable":"hoursperweek", 
-                    "to": "normalizedhoursperweek", 
-                    "operation":"normalize", 
-                    "parameters":{"method":"minmaxfs"}
-                }
-            ]
-        },
-
-        "conditions":{
-            "type":"conditions",
-            "variable_class": "bin",
-            "include":true,
-            "show_output":false,
-            "rule_set":[        
-                {
-                    "bin_variable":"CapitalGainPositive", 
-                    "str_condition":"capitalgain>0"
-                },
-
-                {
-                    "bin_variable":"CapitalLossPositive", 
-                    "str_condition":"capitalloss>0"
-                }
-            ]
-        },
-
-        "buckets":{
-            "type":"buckets",
-            "variable_class": "cat",
-            "include":true,
-            "show_output":false,
-            "rule_set":[
-                {
-                    "variable":"age", 
-                    "category_variable":null, 
-                    "str_labels":["0", "20", "30", "40", "50", "60", "INF"]
-                },
-                {
-                    "variable":"educationnum", 
-                    "category_variable":null, 
-                    "str_labels":["1", "4", "6", "8", "10", "13", "16"]
-                },
-                {
-                    "variable":"hoursperweek", 
-                    "category_variable":null, 
-                    "str_labels":["0", "20", "40", "50", "60", "80", "INF"]
-                }
-            ]
-        },
-
-        "category_merges":{
-            "type":"category_merges",
-            "variable_class": "cat",
-            "include":true,
-            "show_output":false,
-            "rule_set":[
-                {
-                    "variable":"maritalstatus", 
-                    "category_variable":"maritalstatus", 
-                    "group_value":"Married", 
-                    "values":["Married-civ-spouse", "Married-spouse-absent", "Married-AF-spouse"]
-                }
-            ]
-        },
-
-        "pair_equality": {
-            "type":"pair_equality",
-            "variable_class": "cat",
-            "include":false,
-            "show_output":false,
-            "rule_set":[
-                {
-                    "variable1":"age", 
-                    "variable2":"hoursperweek",
-                    "category_variable":"TestGroup"
-                }
-            ]
-        }
-    }
-    """    
+			"preprocess_tasks": [
+				{
+					"type": "transform",
+					"out_type":"cnt",
+					"include": false,
+					"operation": "normalize",
+					"variables": {
+						"source": "age",
+						"destination": "normalizedage"
+					},
+					"parameters": {
+						"method": "zscore"
+					}
+				},
+				{
+					"type": "category_merge",
+					"out_type":"cat",
+					"include": true,
+					"operation": "catmerge",
+					"variables": {
+						"source": "maritalstatus",
+						"destination": "maritalstatus"
+					},
+					"parameters": {
+						"group_value": "Married",
+						"values": [ "Married-civ-spouse", "Married-spouse-absent", "Married-AF-spouse" ]
+					}
+				},
+				{
+					"type": "entity",
+					"out_type":"cat",
+					"include": true,
+					"operation": "dictionary",
+					"variables": {
+						"source": "nativecountry",
+						"destination": "nativecountryGRP"
+					},
+					"parameters": {
+						"match_type": null,
+						"dictionary": [
+							{
+								"entity": "USA",
+								"values": [ "United-States" ],
+								"case": true
+							},
+							{
+								"entity": "Canada",
+								"values": [ "Canada" ],
+								"case": true
+							},
+							{
+								"entity": "OtherAmericas",
+								"values": [ "South", "Mexico", "Trinadad&Tobago", "Jamaica", "Peru", "Nicaragua", "Dominican-Republic", "Haiti", "Ecuador", "El-Salvador", "Columbia", "Honduras", "Guatemala", "Puerto-Rico", "Cuba", "Outlying-US(Guam-USVI-etc)"],
+								"case": true
+							},
+							{
+								"entity": "Europe-Med",
+								"values": [ "Greece", "Holand-Netherlands", "Poland", "Iran", "England", "Germany", "Italy", "Ireland", "Hungary", "France", "Yugoslavia", "Scotland", "Portugal" ],
+								"case": true
+							},
+							{
+								"entity": "Asia",
+								"values": [ "Vietnam", "China", "Taiwan", "India", "Philippines", "Japan", "Hong", "Cambodia", "Laos", "Thailand" ],
+								"case": true
+							},
+							{
+								"entity": "Other",
+								"values": [ "?" ],
+								"case": true
+							}
+						],
+						"null": "NA",
+						"default": "OTHER"
+					}
+				},
+				{
+					"type": "category",
+					"out_type":"cat",
+					"include": true,
+					"operation": "bucket",
+					"variables": {
+						"source": "age",
+						"destination": null
+					},
+					"parameters": {
+						"labels_str": [ "0", "20", "30", "40", "50", "60", "INF" ],
+						"right_inclusive": true,
+						"default": "OTHER",
+						"null": "NA"
+					}
+				},
+				{
+					"type": "category",
+					"out_type":"cat",
+					"include": true,
+					"operation": "bucket",
+					"variables": {
+						"source": "educationnum",
+						"destination": null
+					},
+					"parameters": {
+						"labels_str": [ "1", "5", "8", "9", "12", "16" ],
+						"right_inclusive": true,
+						"default": "OTHER",
+						"null": "NA"
+					}
+				},
+				{
+					"type": "category",
+					"out_type":"cat",
+					"include": true,
+					"operation": "bucket",
+					"variables": {
+						"source": "hoursperweek",
+						"destination": null
+					},
+					"parameters": {
+						"labels_str": [ "0", "20", "35", "40", "60", "INF" ],
+						"right_inclusive": true,
+						"default": "OTHER",
+						"null": "NA"
+					}
+				}
+			]
+		}
+		"""
     
     DataFrame, categoryVariables, binaryVariables, targetVariable = mltk.setup_variables_task(DataFrame, variables_setup_dict)
     
@@ -610,14 +703,30 @@ limitations under the License.
 - 2019-07-02 [v0.1.2]: First release of the PyMLToolkit Python package, a collection of clases and functions facilitating end-to-end machine learning model building and serving over RESTful API.
 - 2019-07-04 [v0.1.3]: Minor bug fixes.
 - 2019-07-14 [v0.1.4]: Improved documentation, Integrated TensorFlow Models, Enhancements and Minor bug fixes.
-- 2019-07-28 [v0.1.5]: Integrated CatBoost Models, Improved model building and serving frameework, support JSON input/output to the ML model bulding and scoring processes, Enhancements and bug fixes.
+- 2019-07-28 [v0.1.5]: Integrated CatBoost Models, Improved model building and serving frameework, text analytics functions, support JSON input/output to the ML model bulding and scoring processes, Enhancements and bug fixes.
+- 2019-08-12[v0.1.6]: Improved Features, Bug Fixes, Enhanced JSON input/output to the ML model bulding and scoring processes (JSON-MLS) and bug fixes.
 
 ## Future Release Plan
-- TBD [v0.1.6]: Integrate image classification model Deployment, UI Preview, ML Model Building Projects, Enhancements and bug fixes.
-- 2019-12-31 [v0.1.7]: Comprehensive documentation, Post implementation evaluation functions, Major bug-fix version of the initial release with finalized enhancements.
-- [v0.2.0]: Imporved model building and serving frameework, UI, support more machine learning algorithms and deep learning.
-- [v0.3.0]: Imporved scalability and performance, Hyper parameter tuning, and Automated Machine Learning.
-- [v0.4.0]: Building continious learning models.
+- TBD [v0.1.7] : Improved documentation and Output formats, Working with Imbalanced Samples, Bug fixes.
+- TBD [v0.1.8] : Integrate image classification model Deployment, Integrate Cross-validation and Hyper parameter tuning.
+- TBD [v0.1.9] : Endambled Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
+- TBD [v0.1.10] : ML Model Building Projects, Enhancements and bug fixes.
+- 2019-12-31 [v0.1.11]: Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
+- TBD [v0.2.0]: Imporved model building and serving frameework and UI, Support more machine learning algorithms, Support multi-class classification and enhanced text analytics functions.
+- TBD [v0.3.0]: Imporved scalability and performance, Automated Machine Learning.
+- TBD [v0.4.0]: Building continious learning models.
+
+## Cite as
+```
+@misc{mltk,
+  author =  "Sumudu Tennakoon",
+  title = "MLToolKit(mltk): A Simplified Toolkit for End-To-End Machine Learing Projects",
+  year = 2019,
+  publisher = "GitHub",
+  howpublished = {\url{https://mltoolkit.github.io/mltk/}},
+  version = "0.1.6"
+}
+```
 
 ## References
 - https://pandas.pydata.org/
