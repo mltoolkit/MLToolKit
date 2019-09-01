@@ -1,14 +1,14 @@
-# MLToolkit 
-## Current release: PyMLToolkit [v0.1.6]
+# MLToolKit 
+## Current release: PyMLToolkit [v0.1.7]
 
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit.png" height="200">
 
-MLToolkit (mltk) is a Python package providing a set of user-friendly functions to help building end-to-end machine learning models in data science research, teaching or production focused projects. 
+MLToolKit (mltk) is a Python package providing a set of user-friendly functions to help building end-to-end machine learning models in data science research, teaching or production focused projects. 
 
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit/image/MLTKProcess.png" height="200">
 
 ## Introduction
-MLToolkit supports all stages of the machine learning application development process.
+MLToolKit supports all stages of the machine learning application development process.
 
 ## Installation
 ```
@@ -24,7 +24,7 @@ pip install pymltoolkit --no-dependencies
 - Data Extraction (SQL, Flatfiles, etc.)
 - Exploratory Data Analysis (statistical summary, univariate analysis, visulize distributions, etc.)
 - Feature Engineering (Supports numeric, text, date/time. Image data support will integrate in later releases of v0.1)
-- Model Building (Currently supported for binary classification only)
+- Model Building (Currently supported for binary classification and regression only)
 - Hyper Parameter Tuning [in development for v0.2]
 - Cross Validation (will integrate in later releases of v0.1)
 - Model Performance Analysis and Comparison Between Models.
@@ -40,6 +40,8 @@ pip install pymltoolkit --no-dependencies
 - Deep Feed Forward Neural Network (DFF): tensorflow
 - Convlutional Neural Network (CNN): tensorflow
 - Gradient Boost : catboost
+- Linear Regression: statsmodels
+- RandomForestRegressor: scikit-learn
 - ... More models will be added in the future releases ...
 
 ## Usage
@@ -128,6 +130,10 @@ table.style.background_gradient(cmap='Greens').set_precision(3)
 # Response Rate For Categorical Variables
 mltk.variable_responses(Data, variables=categoryVariables, target_variable=targetVariable, show_output=False, show_plot=True)
 ```
+# Get numeric units list
+```python
+mltk.get_number_units()
+```
 
 # Variables Manipulations
 ```python
@@ -156,6 +162,8 @@ List of Avaiable Transformation
  | |- normalize
  | |- datepart
  | |- dateadd
+ | |- log
+ | |- exponent
  |- String Transformation (str_transform)
  | |- normalize
  | |- strcount
@@ -168,6 +176,8 @@ List of Avaiable Transformation
  | |- numdiff
  | |- ratio
  | |- datediff
+ | |- rowmin (pair)
+ | |- rowmax (pair)
  |- String Comparison* (str_comparison)
  | |- levenshtein
  | |- jaccard
@@ -243,37 +253,53 @@ TrainDataset, ValidateDataset, TestDataset = mltk.train_validate_test_split(Data
 ```
 ### Model Building
 ```python
-sample_attributes = {'SampleDescription':'Adult Census Income Dataset',
-                    'NumClasses':2,
-                    'RecordIdentifiers':identifierColumns
-                    }
+sample_attributes = {
+						'SampleDescription':'Adult Census Income Dataset',
+						'NumClasses':2,
+						'RecordIdentifiers':identifierColumns
+                }
 
-score_parameters = {'Edges':[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-                   'Quantiles':10,
-                   'ScoreVariable':'Probability',
-                   'ScoreLabel':'Score',
-                   'QuantileLabel':'Quantile'
-                   }
+score_parameters = {
+					'Edges':[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+					'Percentiles':[0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0],
+					'Threshold':0.5,
+					'Quantiles':10,
+					'ScoreVariable':'Probability',
+					'ScoreLabel':'Score',
+					'QuantileLabel':'Quantile',
+					'PredictedLabel':'Predicted'
+                }
+````
 
-model_attributes = {'ModelID': None,   
-                   'ModelName': 'IncomeLevel',
-                   'Version':'0.1',
-                   }
+# Classification Models
+
+Model Attributes
+```python
+model_attributes = {
+					'ModelID': None,
+					'ModelType':'classification',
+					'ModelName': 'IncomeLevel',
+					'Version':'0.1',
+                }
 ```
-
+			   
 Losgistic Regression
 ```python
-model_parameters = {'MLAlgorithm':'LGR', # 'RF', # 'DFF', # 'CNN', # 'CATBST', # 'XGBST'
-                    'MaxIterations':50}  
+model_parameters = {
+					'MLAlgorithm':'LGR', # 'RF', #  'NN', # 'CATBST', (# 'CNN',  # 'XGBST')
+					'MaxIterations':50
+				}  
 ```
 
 Random Forest
 ```python
-model_parameters = {'MLAlgorithm':'RF', # 'LGR', #  'DFF', # 'CNN', # 'CATBST', # 'XGBST'
-                    'NTrees':500,
-                   'MaxDepth':100,
-                   'MinSamplesToSplit':10,
-                   'Processors':2} 
+model_parameters = {
+					'MLAlgorithm':'RF', # 'LGR', #  'NN', # 'CATBST', (# 'CNN',  # 'XGBST')
+					'NTrees':500,
+					'MaxDepth':100,
+					'MinSamplesToSplit':10,
+					'Processors':2
+				} 
 ```
 Neural Networks
 ```python
@@ -303,26 +329,30 @@ SimpleImageClassifier_architecture = {
         'L8':{'type': 'Dense', 'position':'output', 'units': 2, 'activation':'softmax', 'output_shape':None},
        }
 	   
-model_parameters = {'MLAlgorithm':'NN',
-                    'BatchSize':512,
-                   'InputShape':InputShape,
-                   'num_classes':2,
-                   'Epochs':10,
-                   'metrics':['accuracy'],
-                   'architecture':SimpleDFF_architecture} 
+model_parameters = {
+				'MLAlgorithm':'NN',
+				'BatchSize':512,
+				'InputShape':InputShape,
+				'num_classes':2,
+				'Epochs':10,
+				'metrics':['accuracy'],
+				'architecture':SimpleDFF_architecture
+				} 
 ```
 CatBoost
 ```python
-model_parameters = {'MLAlgorithm':'CBST',
-                    'NTrees': 500,
-                    'MaxDepth':10,
-                    'LearningRate':0.7,
-                    'LossFunction':'Logloss',#crossEntropy
-                    'EvalMatrics':'Accuracy',
-                    'Imbalanced':False,
-                    'TaskType':'GPU',
-                    'Processors':2,
-                    'UseBestModel':True}
+model_parameters = {
+					'MLAlgorithm':'CBST',
+					'NTrees': 500,
+					'MaxDepth':10,
+					'LearningRate':0.7,
+					'LossFunction':'Logloss',#crossEntropy
+					'EvalMatrics':'Accuracy',
+					'Imbalanced':False,
+					'TaskType':'GPU',
+					'Processors':2,
+					'UseBestModel':True
+				}
 ```
 
 ### Build Model
@@ -436,6 +466,53 @@ print('Edges', edges)
 # Re-bin score buckets
 edges = [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.95, 1.0]
 LGRModel.set_score_edges(edges)
+```
+
+# Regression Models
+
+Model Attributes
+```python
+model_attributes = {
+					'ModelID': None,   
+					'ModelType':'regression',
+					'ModelName': 'Income',
+					'Version':'0.1',
+                   }
+```
+
+```python
+model_parameters = {
+					'MLAlgorithm':'RFREG', # 'RFREG'
+					'NTrees':200,
+					'MaxDepth':10,
+					'MinSamplesToSplit':6,
+					'Processors':2
+				   } 
+model_parameters = {'MLAlgorithm':'LREG', 'MaxIterations':100}
+```
+
+```python
+REGModel = mltk.build_ml_model(TrainDataset, ValidateDataset, TestDataset, 
+                                  model_variables=modelVariables,
+                                  variable_setup = None,
+                                  target_variable=targetVariable,
+                                  model_attributes=model_attributes, 
+                                  sample_attributes=sample_attributes, 
+                                  model_parameters=model_parameters, 
+                                  score_parameters=score_parameters, 
+                                  return_model_object=True, 
+                                  show_results=False, 
+                                  show_plot=False
+                                  )
+```
+
+```
+print(REGModel.model_attributes['ModelID'])
+print(REGModel.model_interpretation['ModelSummary'])
+print('RMSE =', SelectModel.get_rmse())
+print('R^2 =', SelectModel.get_r2())
+REGModel.plot_eval_matrics(comparison=True)
+SelectModel.plot_eval_matrics(comparison=True)
 ```
 
 Save model
@@ -604,7 +681,7 @@ def ETL(DataFrame, variables_setup_dict=None):
     return DataFrame, input_columns
 ```
 
-Scoring
+Scoring/Ranking
 ```python
 MLModelObject = mltk.load_model(saveFilePath)
 SampleDataset = pd.read_csv(r'test.csv')
@@ -680,6 +757,20 @@ Split Format for mulltiple records
 }
 ```
 
+Using Model Chest to Deploy Models
+```python
+MyModelChest = mltk.ModelChest()
+MyModelChest.add_model(model_key='test', model_file=None, model_object=MLModelObject, replace=False)
+MyModelChest.save_model_chest()
+MyModelChest.get_model_chest_json()
+```
+
+load Models from Model Chest
+```python
+lodedModel = MyModelChest.get_model_object('test')
+lodedModel.get_model_manifest()
+```
+
 ## License
 ```
 Copyright 2019 Sumudu Tennakoon
@@ -696,7 +787,20 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ```
-## MLToolkit Project Timeline
+
+## Cite as
+```
+@misc{mltk2019,
+  author =  "Sumudu Tennakoon",
+  title = "MLToolKit(mltk): A Simplified Toolkit for End-To-End Machine Learing Projects",
+  year = 2019,
+  publisher = "GitHub",
+  howpublished = {\url{https://mltoolkit.github.io/mltk/}},
+  version = "0.1.7"
+}
+```
+
+## MLToolKit Project Timeline
 - 2018-07-02 [v0.0.1]: Initial set of functions for data exploration, model building and model evaluation was published to Github. (https://github.com/sptennak/MachineLearning).
 - 2018-01-03 [v0.0.2]: Created more functions for data exploration including web scraping and geo spacial data analysis for for IBM Coursera Data Science Capstone Project was published to Github. (https://github.com/sptennak/Coursera_Capstone).
 - 2019-03-20 [v0.1.0]: Developed and published initial version of model building and serving framework for IBM Coursera Advanced Data Science Professional Certificate Capstone Project. (https://github.com/sptennak/IBM-Coursera-Advanced-Data-Science-Capstone).
@@ -705,28 +809,17 @@ limitations under the License.
 - 2019-07-14 [v0.1.4]: Improved documentation, Integrated TensorFlow Models, Enhancements and Minor bug fixes.
 - 2019-07-28 [v0.1.5]: Integrated CatBoost Models, Improved model building and serving frameework, text analytics functions, support JSON input/output to the ML model bulding and scoring processes, Enhancements and bug fixes.
 - 2019-08-12[v0.1.6]: Improved Features, Bug Fixes, Enhanced JSON input/output to the ML model bulding and scoring processes (JSON-MLS) and bug fixes.
+- 2019-08-31 [v0.1.7] : Added more data processing functions, Enhanced output formats, Enhanced model deployment, Overall improvements and bug fixes.
 
 ## Future Release Plan
-- TBD [v0.1.7] : Improved documentation and Output formats, Working with Imbalanced Samples, Bug fixes.
-- TBD [v0.1.8] : Integrate image classification model Deployment, Integrate Cross-validation and Hyper parameter tuning.
-- TBD [v0.1.9] : Endambled Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
-- TBD [v0.1.10] : ML Model Building Projects, Enhancements and bug fixes.
-- 2019-12-31 [v0.1.11]: Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
+- TBD [v0.1.8] : Integrate image classification model Deployment, Post additional tutorials and examples, Improved Documentation, Enhancements and bug fixes.
+- TBD [v0.1.9] : Working with Imbalanced Samples, Integrate Cross-validation, Enhancements and bug fixes.
+- TBD [v0.1.10] : Building Ensambled Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
+- TBD [v0.1.11]: ML Model Building Projects, Enhancements and bug fixes.
+- 2019-12-31 [v0.1.12]:Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
 - TBD [v0.2.0]: Imporved model building and serving frameework and UI, Support more machine learning algorithms, Support multi-class classification and enhanced text analytics functions.
 - TBD [v0.3.0]: Imporved scalability and performance, Automated Machine Learning.
 - TBD [v0.4.0]: Building continious learning models.
-
-## Cite as
-```
-@misc{mltk,
-  author =  "Sumudu Tennakoon",
-  title = "MLToolKit(mltk): A Simplified Toolkit for End-To-End Machine Learing Projects",
-  year = 2019,
-  publisher = "GitHub",
-  howpublished = {\url{https://mltoolkit.github.io/mltk/}},
-  version = "0.1.6"
-}
-```
 
 ## References
 - https://pandas.pydata.org/
