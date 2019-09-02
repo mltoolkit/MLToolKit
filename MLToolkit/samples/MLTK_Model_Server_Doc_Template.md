@@ -206,7 +206,7 @@ python -m pip install pymltoolkit --upgrade
 ```
 -------------------------------------------------------------------------------
 
-## Further Infomration/Help
+## Further Information/Help
 
 <<your_applicatio_nnme>> built using MLToolKit end-to-end model building and serving framework. 
 For more information, please visit the MLToolKit Project website: <a href="https://mltoolkit.github.io/MLToolKit">https://mltoolkit.github.io/MLToolKit/</a>.
@@ -214,7 +214,7 @@ For more information, please visit the MLToolKit Project website: <a href="https
 <a href="https://mltoolkit.github.io/MLToolKit">https://mltoolkit.github.io/MLToolKit/</a>
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-## END OF THE DOCUMENATION
+## END OF THE DOCUMENTATION
 
 
 
