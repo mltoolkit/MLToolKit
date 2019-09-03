@@ -10,13 +10,13 @@ Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0) <br>
 
 -------------------------------------------------------------------------------
 
-# <<your_applicatio_name>>
+# <<your_application_name>>
 ## Documentation
 
-##### Author: <<authoer_name>> 
-##### Create Date: <<create_date>>
-##### Updated By: <<updated_by>>
-##### Last Update: <<update_date>>
+* Author: <<authoer_name>> 
+* Create Date: <<create_date>>
+* Updated By: <<updated_by>>
+* Last Update: <<update_date>>
 
 -------------------------------------------------------------------------------
 ## Introduction
@@ -170,6 +170,11 @@ CTRL + C or close command line window
 <<service_status>>
 ```
 
+### Remove Service Status
+```
+<<service_status>>
+```
+
 -------------------------------------------------------------------------------
 
 ## Manage Python Environment
@@ -208,13 +213,14 @@ python -m pip install pymltoolkit --upgrade
 
 ## Further Information/Help
 
-<<your_applicatio_nnme>> built using MLToolKit end-to-end model building and serving framework. 
+<<your_application_name>> built using MLToolKit end-to-end model building and serving framework. 
 For more information, please visit the MLToolKit Project website: <a href="https://mltoolkit.github.io/MLToolKit">https://mltoolkit.github.io/MLToolKit/</a>.
 "MLToolKit (mltk) is a Python package providing a set of user-friendly functions to help building end-to-end machine learning models in data science research, teaching or production focused projects."
 <a href="https://mltoolkit.github.io/MLToolKit">https://mltoolkit.github.io/MLToolKit/</a>
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 
-## END OF THE DOCUMENTATION
+MLToolKit Deployment Documentation Template Version: 0.1.7
+### END OF THE DOCUMENTATION
 
 
 
