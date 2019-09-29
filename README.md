@@ -1,5 +1,5 @@
 # MLToolKit 
-## Current release: PyMLToolkit [v0.1.7]
+## Current release: PyMLToolkit [v0.1.8]
 
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit.png" height="200">
 
@@ -164,6 +164,7 @@ List of Avaiable Transformation
  | |- dateadd
  | |- log
  | |- exponent
+ | |- segment (piecewise functions)
  |- String Transformation (str_transform)
  | |- normalize
  | |- strcount
@@ -182,14 +183,14 @@ List of Avaiable Transformation
  | |- levenshtein
  | |- jaccard
  | |- ..more to add ..
- * pair comparison
+ |- Pair comparison
  
 List of Avaiable Discrete Feature Transforms
-|- Binary Variable (condition)
-|- Numeric to Catergory (buckets)
-|- Entity Grouping (dictionary)
-|- Pair Equality/Existance (pair_equality)
-|- Category Merge(category_merge)
+ |- Binary Variable (condition)
+ |- Numeric to Catergory (buckets)
+ |- Entity Grouping (dictionary)
+ |- Pair Equality/Existance (pair_equality)
+ |- Category Merge(category_merge)
 ```
 
 ```python
@@ -808,15 +809,16 @@ limitations under the License.
 - 2019-07-04 [v0.1.3]: Minor bug fixes.
 - 2019-07-14 [v0.1.4]: Improved documentation, Integrated TensorFlow Models, Enhancements and Minor bug fixes.
 - 2019-07-28 [v0.1.5]: Integrated CatBoost Models, Improved model building and serving frameework, text analytics functions, support JSON input/output to the ML model bulding and scoring processes, Enhancements and bug fixes.
-- 2019-08-12[v0.1.6]: Improved Features, Bug Fixes, Enhanced JSON input/output to the ML model bulding and scoring processes (JSON-MLS) and bug fixes.
+- 2019-08-12 [v0.1.6]: Improved Features, Bug Fixes, Enhanced JSON input/output to the ML model bulding and scoring processes (JSON-MLS) and bug fixes.
 - 2019-08-31 [v0.1.7] : Added more data processing functions, Enhanced output formats, Enhanced model deployment, Overall improvements and bug fixes.
+- 2019-09-28 [v0.1.8] : Improved Documentation, Enhancements and bug fixes.
 
 ## Future Release Plan
-- TBD [v0.1.8] : Integrate image classification model Deployment, Post additional tutorials and examples, Improved Documentation, Enhancements and bug fixes.
-- TBD [v0.1.9] : Working with Imbalanced Samples, Integrate Cross-validation, Enhancements and bug fixes.
-- TBD [v0.1.10] : Building Ensambled Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
-- TBD [v0.1.11]: ML Model Building Projects, Enhancements and bug fixes.
-- 2019-12-31 [v0.1.12]:Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
+- TBD [v0.1.9] : Integrate image classification model Deployment, Post additional tutorials and examples, Improved Documentation, Enhancements and bug fixes.
+- TBD [v0.1.10] : Working with Imbalanced Samples, Integrate Cross-validation, Enhancements and bug fixes.
+- TBD [v0.1.11] : Building Ensambled Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
+- TBD [v0.1.12]: ML Model Building Projects, Enhancements and bug fixes.
+- 2019-12-31 [v0.1.13]:Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
 - TBD [v0.2.0]: Imporved model building and serving frameework and UI, Support more machine learning algorithms, Support multi-class classification and enhanced text analytics functions.
 - TBD [v0.3.0]: Imporved scalability and performance, Automated Machine Learning.
 - TBD [v0.4.0]: Building continious learning models.
