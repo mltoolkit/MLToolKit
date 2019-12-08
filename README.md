@@ -6,7 +6,7 @@ www.mltoolkit.org
 
 MLToolKit (mltk) is a Python package providing a set of user-friendly functions to help building end-to-end machine learning models in data science research, teaching or production focused projects. 
 
-<img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit/image/MLTKProcess.png" height="200">
+<img src="https://raw.githubusercontent.com/mltoolkit/MLToolKit/master/MLToolkit/image/MLTKProcess.png" height="250">
 
 ## Introduction
 MLToolKit supports all stages of the machine learning application development process.
