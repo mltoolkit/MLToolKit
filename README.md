@@ -1,5 +1,6 @@
-# MLToolKit 
-## Current release: PyMLToolkit [v0.1.8]
+# MLToolKit Project 
+www.mltoolkit.org
+## Current release: PyMLToolkit [v0.1.9]
 
 <img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit.png" height="200">
 
@@ -21,13 +22,13 @@ pip install pymltoolkit --no-dependencies
 ```
 
 ## Functions
-- Data Extraction (SQL, Flatfiles, etc.)
+- Data Extraction (SQL, Flatfiles, Images, etc.)
 - Exploratory Data Analysis (statistical summary, univariate analysis, visulize distributions, etc.)
 - Feature Engineering (Supports numeric, text, date/time. Image data support will integrate in later releases of v0.1)
 - Model Building (Currently supported for binary classification and regression only)
 - Hyper Parameter Tuning [in development for v0.2]
 - Cross Validation (will integrate in later releases of v0.1)
-- Model Performance Analysis and Comparison Between Models.
+- Model Performance Analysis, Explain Predictions (LIME and SHAP) and Performance Comparison Between Models.
 - JSON input script for executing model building and scoring tasks.
 - Model Building UI [in development for v0.2]
 - ML Model Building Project [in development for v0.2]
@@ -734,6 +735,31 @@ Output
  'Probability': 0.6790258814478549,
  'Score': 7}]
 ```
+
+### Model Output Explanation (Using SHAP and LIME Python libraries)
+```python
+# Create Explainer
+Explainer = mltk.build_explainer(MLModelObject, explainer_config={'IdColumns':['ID'], 'Method':'shap', 'ClassNumber':1, 'FillMissing':0})
+
+save_file_path = '{}_Explainer.pkl'.format(MLModelObject.get_model_id())
+mltk.save_explainer(Explainer, save_file_path)
+
+Explainer = mltk.load_explainer(save_file_path)
+```
+```python
+# Calculate Impact Values
+ImpactValues, VariableValues = mltk.get_explainer_values_task(DataFrame, Explainer=Explainer, verbose=False)
+
+# Plot Variable Impact
+# force_plot
+explainer_visual = mltk.get_explainer_visual(ImpactValues, VariableValues, Explainer, visual_config={'figsize':[20,4], 'text_rotation':90})
+
+# Generate Explain Summary
+explainer_summary = mltk.get_shap_impact_summary(ImpactValues, VariableValues, Explainer.get_model_variables(), iloc=0, top_n=5, show_plot=True)
+
+explainer_report, explain_plot = mltk.get_explainer_report(DataFrame, Explainer, top_n=10, show_plot=True, return_type='frame')
+```
+
 ### JSON Input for scoring
 
 Records Format for single or fewer number of records
@@ -772,6 +798,84 @@ lodedModel = MyModelChest.get_model_object('test')
 lodedModel.get_model_manifest()
 ```
 
+## Working with Image Data
+```python
+size=(96, 64)
+file_folder_path = r'C:\Projects\Data\images\train'
+ImagesDataFrame = mltk.read_image_folder(file_folder_path, size=size, show_image=False)
+```
+
+```python
+ImagesDataFrame, input_shape = mltk.prepare_image_dataset_to_model(ImagesDataFrame, 
+                                                             image_column='Image', 
+                                                             processed_image_column='ImageToModel',
+                                                             label_column='Label',
+                                                             image_data_format='channels_last', 
+                                                             size=size)
+												 
+```
+### Building CNN Model
+```python
+sample_attributes = {'SampleDescription':'Image CLassification Example',
+                    'NumClasses':NClasses,
+                    'RecordIdentifiers':identifierColumns,
+                    'ModelDataStats':modelDataStats
+                    }
+
+score_parameters = {'Edges':[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+                    'Percentiles':[0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0],
+                    'Threshold':0.5,
+                   'Quantiles':10,
+                   'ScoreVariable':'Probability',
+                   'ScoreLabel':'Score',
+                   'QuantileLabel':'Quantile',
+                   'PredictedLabel':'Predicted'
+                   }
+
+model_attributes = {
+                    'ModelID': None,   
+                    'ModelType':'classification',
+                    'ModelName': 'IncomeLevel',
+                    'Version':'0.1',
+                   }
+				   
+architecture = {
+        'L1':{'type': 'Conv2D', 'position':'input', 'filters':32, 'kernel_size':(3,3), 'padding':'same', 'strides':(1,1), 'activation':'relu', 'input_shape':input_shape},
+        'L2':{'type': 'MaxPooling2D', 'pool_size': (2,2), 'padding':'same'},
+        'L3':{'type': 'Dropout', 'position':'hidden', 'rate':0.2},
+        'L4':{'type': 'Conv2D', 'position':'hidden', 'filters':64, 'kernel_size':(3,3), 'padding':'same', 'strides':(1,1), 'activation':'relu'},
+        'L5':{'type': 'MaxPooling2D', 'pool_size': (2,2), 'padding':'same'},
+        'L6':{'type': 'Dropout', 'position':'hidden', 'rate':0.2},
+        'L7':{'type': 'Flatten'},
+        'L8':{'type': 'Dense', 'position':'hidden', 'units': 256, 'activation':'softmax', 'output_shape':None},
+        'L9':{'type': 'Dropout', 'position':'hidden', 'rate':0.2},
+        'L10':{'type': 'Dense', 'position':'output', 'units': n_classes, 'activation':'softmax', 'output_shape':None},
+       }	
+
+model_parameters = {'MLAlgorithm':'CNN',
+                    'BatchSize':128,
+                   'InputShape':inputShape,
+                   'NumClasses':NClasses,
+                   'Epochs':50,
+                   'EvalMatrics':['accuracy'],
+                   'Architecture':architecture} 
+
+CNNModel = mltk.build_ml_model(TrainDataset, ValidateDataset, TestDataset, 
+                                  model_variables=modelVariables,
+                                  variable_setup = None,
+                                  target_variable=targetVariable,
+                                  model_attributes=model_attributes, 
+                                  sample_attributes=sample_attributes, 
+                                  model_parameters=model_parameters, 
+                                  score_parameters=score_parameters, 
+                                  return_model_object=True, 
+                                  show_results=False, 
+                                  show_plot=True
+                                  )
+
+CNNModel.plot_eval_matrics()						  
+```
+
 ## License
 ```
 Copyright 2019 Sumudu Tennakoon
@@ -797,7 +901,7 @@ limitations under the License.
   year = 2019,
   publisher = "GitHub",
   howpublished = {\url{https://mltoolkit.github.io/mltk/}},
-  version = "0.1.7"
+  version = "0.1.9"
 }
 ```
 
@@ -812,24 +916,48 @@ limitations under the License.
 - 2019-08-12 [v0.1.6]: Improved Features, Bug Fixes, Enhanced JSON input/output to the ML model bulding and scoring processes (JSON-MLS) and bug fixes.
 - 2019-08-31 [v0.1.7] : Added more data processing functions, Enhanced output formats, Enhanced model deployment, Overall improvements and bug fixes.
 - 2019-09-28 [v0.1.8] : Improved Documentation, Enhancements and bug fixes.
+- 2019-12-07 [v0.1.9] : Added model explainability, Integrate image classification model Deployment, Enhancements and bug fixes.
 
-## Future Release Plan
-- TBD [v0.1.9] : Integrate image classification model Deployment, Post additional tutorials and examples, Improved Documentation, Enhancements and bug fixes.
-- TBD [v0.1.10] : Working with Imbalanced Samples, Integrate Cross-validation, Enhancements and bug fixes.
-- TBD [v0.1.11] : Building Ensambled Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
+## Future Release Plan 
+- TBD [v0.1.10] : Working with Imbalanced Samples, Integrate Cross-validation, Post additional tutorials and examples, Improved Documentation, Enhancements and bug fixes.
+- TBD [v0.1.11] : Building Ensamble Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
 - TBD [v0.1.12]: ML Model Building Projects, Enhancements and bug fixes.
 - 2019-12-31 [v0.1.13]:Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
 - TBD [v0.2.0]: Imporved model building and serving frameework and UI, Support more machine learning algorithms, Support multi-class classification and enhanced text analytics functions.
 - TBD [v0.3.0]: Imporved scalability and performance, Automated Machine Learning.
 - TBD [v0.4.0]: Building continious learning models.
 
+## Acknowledgement and Remarks
+Some functions of MLToolKit depends on number of Open Source Python Libraries such as
+- Data Manipulation : Pandas
+- Machine Learning: Statsmodels, Scikit-learn, Catboost
+- Deep Learning: Tensorflow, 
+- Model Interpretability: Shap, Lime
+- Server Framework: Flask
+- Text Processing: BeautifulSoup, TextLab
+- Database Connectivity: SQLAlchemy, PyODBC
+MLToolkit Project acknowledge the creators and contributors of the above libraries for their contribution to the Open Source Community.
+
+MLToolKit library and some novel concepts introduced with original ideas of the author implemented as an effort of putting together the lifetime learning and experience working on multiple data science projects to a good use and as a contribution back to the Open Source Community. 
+
+Author would like to thank number of content creators in the data science and machine learning topics not limited to online learning platforms and blogs for making aviable insightful resources to explore and learn the subject. A complete reference list will be published with a future version...
+
+As a Free and Open Source initiative and a independent R&D project, author has no conflict of interest or, financial interest to the MLToolKit library. However, proper mention of the source abiding the License Terms is highly appreciated when the library itself or any useful concepts or parts are used. 
+
+MLToolKit is set to evolve with adding more features and functionality, and interoperability with more standard data science and machine learning libraries. MLToolKit will always be available as Free and Open Source Python library in the future.
+
 ## References
 - https://pandas.pydata.org/
 - https://scikit-learn.org
+- https://www.tensorflow.org/
+- https://keras.io/layers/recurrent/
 - https://www.numpy.org/
 - https://docs.python.org/3.6/library/re.html
 - https://www.statsmodels.org
 - https://matplotlib.org/
 - http://flask.pocoo.org/
 - https://catboost.ai/
+- https://github.com/slundberg/shap
+- https://github.com/marcotcr/lime
 - http://json.org/
+- https://pillow.readthedocs.io/en/stable/
