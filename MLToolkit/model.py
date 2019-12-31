@@ -14,10 +14,10 @@ Tensorflow, Statmodels, Catboost, XGboost, etc.
 
 Main Features
 -------------
-- Data Extraction (SQL, Flatfiles, etc.)
+- Data Extraction (SQL, Flatfiles, Images, etc.)
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
-- Model performance analysis and comparison between models
+- Model performance analysis, Explain Predictions and comparison between models
 - Cross Validation and Hyper parameter tuning
 - JSON input script for executing model building and scoring tasks.
 - Model Building UI
@@ -122,7 +122,10 @@ class MLModel():
     
     def set_model_object(self, model_object):
         self.model_object = model_object     
-
+    
+    def get_model_object(self):
+        return self.model_object
+    
     def get_model_algorithm(self):
         return self.model_parameters['MLAlgorithm']
         
@@ -598,6 +601,7 @@ def build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, ta
     y_validate = keras.utils.to_categorical(y_validate, num_classes)
     
     ###########################################################################    
+    print('Input shape:', x_train.shape)
     model = stack_tf_layers_sequential(architecture)
     model.summary()  
     ###########################################################################
@@ -702,6 +706,25 @@ def build_cbst_model(x_train, y_train, x_validate, y_validate, model_variables, 
        
     return model, output, model_fit_time        
 
+def model_dataset_to_array(Dataset, model_variables, target_variable, is_image_data=False):
+    """
+    TO DO: Find a more robust solution for this
+    is_image_data : bool, defult False
+        Converting Pandas series to numpy array will loose the shape when the data is mulidimentional (image data)
+    """
+    
+    if is_image_data:
+        x_data = np.asarray(list(Dataset[model_variables[0]].values), dtype ='float32') # Fails when model_varibles provided as a list
+    else:
+        x_data = Dataset[model_variables].values
+    
+    y_data = Dataset[target_variable].values
+    y_data_act = y_data
+    
+    return x_data, y_data, y_data_act
+    
+    
+    
 def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, target_variable, 
                  variable_setup, model_attributes, sample_attributes, model_parameters, score_parameters,
                    return_model_object=False, show_results=False, show_plot=False):
@@ -736,26 +759,35 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     model_parameters = copy.deepcopy(model_parameters)
     score_parameters = copy.deepcopy(score_parameters)
     ###############################################################################
+    ml_algorithm = model_parameters['MLAlgorithm']
+    if ml_algorithm == 'CNN':
+        is_image_data = True
+    else:
+        is_image_data = False
+    ###############################################################################
     # TRAIN DATASET
-    x_train = TrainDataset[model_variables].values
+    x_train, y_train, y_train_act = model_dataset_to_array(TrainDataset, 
+                                                           model_variables, 
+                                                           target_variable, 
+                                                           is_image_data=is_image_data)
+    
     print('Train samples: {} loded...'.format(x_train.shape[0]))
-
-    y_train = TrainDataset[target_variable].values
-    y_train_act = y_train
     ###############################################################################
     # VALIDATE DATASET
-    x_validate = ValidateDataset[model_variables].values
+    x_validate, y_validate, y_validate_act = model_dataset_to_array(ValidateDataset, 
+                                                                   model_variables, 
+                                                                   target_variable, 
+                                                                   is_image_data=is_image_data)
+    
     print('Validate samples: {} loded...'.format(x_validate.shape[0]))
-
-    y_validate = ValidateDataset[target_variable].values
-    y_validate_act = y_validate
     ###############################################################################
     # TEST DATASET
-    x_test = TestDataset[model_variables].values
+    x_test, y_test, y_test_act = model_dataset_to_array(TestDataset, 
+                                                           model_variables, 
+                                                           target_variable, 
+                                                           is_image_data=is_image_data)
+    
     print('Test samples: {} loded...'.format(x_test.shape[0]))
-
-    y_test = TestDataset[target_variable].values
-    y_test_act = y_test
     ###############################################################################
     
     model_interpretation={}
@@ -796,7 +828,7 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     print(score_parameters)
     ###############################################################################
     
-    ml_algorithm = model_parameters['MLAlgorithm']
+    # Model fit routine selection
     
     if ml_algorithm=='LREG':
         ###############################################################################
@@ -858,7 +890,7 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
         TestDataset[score_variable]=y_pred_prob
         ###############################################################################
         
-    elif ml_algorithm=='NN':
+    elif ml_algorithm in ['NN', 'CNN']:
         ###############################################################################
         import tensorflow
         import tensorflow.keras

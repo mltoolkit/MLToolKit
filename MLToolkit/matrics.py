@@ -12,10 +12,10 @@ Tensorflow, Statmodels, Catboost, XGboost, etc.
 
 Main Features
 -------------
-- Data Extraction (SQL, Flatfiles, etc.)
+- Data Extraction (SQL, Flatfiles, Images, etc.)
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
-- Model performance analysis and comparison between models
+- Model performance analysis, Explain Predictions and comparison between models
 - Cross Validation and Hyper parameter tuning
 - JSON input script for executing model building and scoring tasks.
 - Model Building UI

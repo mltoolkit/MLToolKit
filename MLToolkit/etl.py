@@ -15,7 +15,7 @@ Main Features
 - Data Extraction (SQL, Flatfiles, etc.)
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
-- Model performance analysis and comparison between models
+- Model performance analysis, Explain Predictions and comparison between models
 - Cross Validation and Hyper parameter tuning
 - JSON input script for executing model building and scoring tasks.
 - Model Building UI
@@ -99,7 +99,23 @@ def get_number_units():
 ###############################################################################
 ##[ I/O FUNCTIONS]#############################################################      
 ###############################################################################
-
+def read_data(connector, params=None):
+    connector = {
+            "method":"sql", #"pickle", "csv", "excel"
+            "source":{"dbms":"mssql", "server":"SQLSERVER1", "database":"SampleDB", "schema":None},
+            "auth":{'type':'user', 'user':'user1', 'pwd':'password123'},
+            "params":{}
+            }
+    
+    connector2 = {
+            "method":"sql", #"pickle", "csv", "excel"
+            "source":{"dbms":"snowflake", "server":"SQLSERVER1", "database":"SampleDB", "schema":None}, # account (server)
+            "auth":{'type':'user', 'user':'user1', 'password':'password123', "role": None}, 
+            "params":{}
+            }
+    
+    return None    
+    
 def read_data_csv(file, separator=',', quoting= 'MINIMAL', compression='infer', encoding='utf-8'):
     """
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_csv.html
@@ -130,12 +146,13 @@ def read_data_csv(file, separator=',', quoting= 'MINIMAL', compression='infer', 
         start_time = timer() 
         DataFrame = pd.read_csv(filepath_or_buffer=file, sep=separator, quoting=quoting, 
                                 compression=compression, encoding=encoding)  
+        execute_time = timer() - start_time
     except:
         execute_time = 0
         DataFrame = pd.DataFrame()
         print(traceback.format_exc())
         
-    execute_time = timer() - start_time
+    
     
     print('{:,d} records were loaded. execute time = {} s'.format(len(DataFrame.index), execute_time))
     
@@ -238,8 +255,28 @@ def write_data_pickle(DataFrame, file, compression='infer', protocol=3):
         print(traceback.format_exc())
         
     print('{:,d} records were written. execute time = {} s'.format(len(DataFrame.index), execute_time))
-    
-def read_data_sql(query=None, server=None, database=None, auth=None, params=None):
+
+def create_sql_connect_string(server=None, database=None, auth=None, dbms='mssql', autocommit = 'True'):    
+    if dbms=='mssql':
+        # Download ODBC Driver https://docs.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server
+        driver = 'ODBC Driver 13 for SQL Server' # 'SQL Server' # 
+        if auth['type']=='machine':
+            connect_string = r'Driver={'+driver+'};SERVER='+server+';DATABASE='+database+';TRUSTED_CONNECTION=yes;autocommit='+autocommit+';'
+            connect_string = urllib.parse.quote_plus(connect_string)
+        elif auth['type']=='user':
+            uid =  auth['uid'] 
+            pwd =  auth['pwd'] 
+            connect_string = r'Driver={'+driver+'};SERVER='+server+';DATABASE='+database+';UID='+uid+'r;PWD='+pwd+'; autocommit='+autocommit+';'
+            connect_string = urllib.parse.quote_plus(connect_string)
+    elif dbms=='mysql':
+        connect_string = None
+    elif dbms=='snowflake':
+        connect_string = None
+    else:
+        raise Exception("Parameter dbms not provided. Accepted values are {'mssql', 'mysql', 'snowflake'}")
+    return connect_string
+
+def read_data_sql(query=None, server=None, database=None, auth=None, dbms='mssql', params=None):
     """
     Parameters
     ----------
@@ -291,7 +328,7 @@ def read_data_sql(query=None, server=None, database=None, auth=None, params=None
    
     return DataFrame
 
-def write_data_sql(DataFrame, server=None, database=None, schema=None, table=None, index=False, dtypes=None, if_exists='fail', auth=None, params=None):
+def write_data_sql(DataFrame, server=None, database=None, schema=None, table=None, index=False, dtypes=None, if_exists='fail', auth=None, dbms='mssql', params=None):
     """
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_sql.html
     
@@ -364,7 +401,7 @@ def write_data_sql(DataFrame, server=None, database=None, schema=None, table=Non
     
     return rowcount
 
-def execute_sql_query(query=None, server=None, database=None, auth=None, params=None):
+def execute_sql_query(query=None, server=None, database=None, auth=None, params=None, dbms='mssql', on_error='ignore'):
     """
     Parameters
     ----------
@@ -400,7 +437,6 @@ def execute_sql_query(query=None, server=None, database=None, auth=None, params=
                 pwd =  auth['pwd'] 
                 connect_string = r'Driver={'+driver+'};SERVER='+server+';DATABASE='+database+';UID='+uid+'r;PWD='+pwd+'; autocommit='+autocommit+';'
                 connect_string = urllib.parse.quote_plus(connect_string)
-                engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect="+connect_string, fast_executemany=fast_executemany)
             else:
                 raise Exception('No db server authentication method provided !')
             
@@ -451,7 +487,7 @@ def execute_sql_query(query=None, server=None, database=None, auth=None, params=
             
         return rowcount      
 
-def sql_server_database_list(server, auth=None, user_database_only=True):
+def sql_server_database_list(server, auth=None, user_database_only=True, dbms='mssql'):
     """
     Reference: https://docs.microsoft.com/en-us/sql/relational-databases/system-compatibility-views/sys-sysdatabases-transact-sql?view=sql-server-2017
     """
@@ -462,7 +498,7 @@ def sql_server_database_list(server, auth=None, user_database_only=True):
         NAME AS [DBName],
         STATUS AS [Status],
         CRDATE AS [CreateDate]
-    FROM master.dbo.sysdatabases
+    FROM master.dbo.sysdatabases (NOLOCK)
     WHERE Name NOT IN ( 'master','tempdb','model' ,'msdb')
     """    
     DBList = read_data_sql(query=query, server=server, database='master', auth=auth, params=None)
@@ -504,33 +540,33 @@ def sql_server_database_usage_report(server, database, auth=None, schema=None, t
         SELECT
             @@SERVERNAME AS [Server],
             DB_Name() AS [DB],
-            schema.NAME AS [Schema],
-            table.NAME AS [Table],
-            table.CREATE_DATE AS [CreateDate],
-            table.MODIFY_DATE AS [ModifyDate],		
-            part.ROWS AS [Rows],
+            [schema].NAME AS [Schema],
+            [table].NAME AS [Table],
+            [table].CREATE_DATE AS [CreateDate],
+            [table].MODIFY_DATE AS [ModifyDate],		
+            [part].ROWS AS [Rows],
             SUM(alloc.total_pages) * 8 AS [TotalSpaceKBx],
             SUM(alloc.used_pages) * 8 AS [UsedSpaceKBx],
         FROM
-            sys.tables table
+            sys.tables [table] (NOLOCK)
         INNER JOIN     
-            sys.indexes ix ON (table.OBJECT_ID = ix.OBJECT_ID)
+            sys.indexes (NOLOCK) [ix] ON ([table].OBJECT_ID = [ix].OBJECT_ID)
         INNER JOIN
-            sys.partitions part ON (ix.OBJECT_ID = part.OBJECT_ID AND ix.index_id = part.index_id)
+            sys.partitions (NOLOCK) [part] ON ([ix].OBJECT_ID = [part].OBJECT_ID AND ix.index_id = [part].index_id)
         INNER JOIN
-            sys.allocation_units alloc ON (part.PARTITION_ID = alloc.container_id)
+            sys.allocation_units (NOLOCK) [alloc] ON ([part].PARTITION_ID = [alloc].container_id)
         LEFT OUTER JOIN
-            sys.schemas schema ON (table.SCHEMA_ID = schema.SCHEMA_ID)
+            sys.schemas [schema] (NOLOCK) ON ([table].SCHEMA_ID = [schema].SCHEMA_ID)
         WHERE
-            table.NAME IS NOT NULL
+            [table].NAME IS NOT NULL
             {user_tables_only_condition}
             {table_condition}
             {schema_condition}
         GROUP BY
-            table.NAME, 
-            table.CREATE_DATE, 
-            table.MODIFY_DATE, 
-            schema.NAME, part.ROWS
+            [table].NAME, 
+            [table].CREATE_DATE, 
+            [table].MODIFY_DATE, 
+            [schema].NAME, part.ROWS
         """.format(schema_condition=schema_condition, table_condition=table_condition, user_tables_only_condition=user_tables_only_condition)
         
         DBUsageReport = read_data_sql(query=query, server=server, database=database, auth=auth, params=None)

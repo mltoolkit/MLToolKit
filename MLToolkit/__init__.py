@@ -4,12 +4,12 @@
 __docformat__ = 'restructuredtext'
 __name__="mltk"
 __distname__="pymltoolkit"
-__version__="0.1.8"
+__version__="0.1.9"
 __description__= 'End-to-end Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
 __url__="https://mltoolkit.github.io/MLToolKit"
 __create_date__="Sun Jul 01 2018"
-__last_update__="Sat Sap 28 2019"
+__last_update__="Sat Dec 07 2019"
 __license__="""
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
@@ -19,15 +19,16 @@ MLToolkit - a verstile helping library for machine learning
 'MLToolkit' is a Python package providing a set of user-friendly functions to 
 help building machine learning models in data science research or production 
 focused projects. It is compatible with and interoperate with popular data 
-analysis, manipulation and machine learning libraries Pandas, Sci-kit Learn, 
-Tensorflow, Statmodels, Catboost, XGboost, etc.
+analysis, manipulation, machine learning and model interpretation libraries 
+Pandas, Sci-kit Learn, Tensorflow, Statmodels, Catboost, XGboost, Shap, Lime,
+etc.
 
 Main Features
 -------------
-- Data Extraction (SQL, Flatfiles, etc.)
+- Data Extraction (SQL, Flatfiles, Images, etc.)
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
-- Model performance analysis and comparison between models
+- Model performance analysis, Explain Predictions and comparison between models
 - Cross Validation and Hyper parameter tuning
 - JSON input script for executing model building and scoring tasks.
 - Model Building UI
@@ -42,6 +43,20 @@ Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
 Github: https://github.com/mltoolkit/MLToolKit
+
+Depedancies
+-----------
+- Pandas
+- Statsmodels
+- Scikit-learn
+- Catboost
+- Tensorflow
+- Shap
+- Lime
+- Flask
+- BeautifulSoup
+- SQLAlchemy
+- PyODBC
 
 License
 -------
@@ -83,9 +98,23 @@ from mltk.model import *
 from mltk.matrics import *
 from mltk.deploy import *
 from mltk.modelchest import *
+from mltk.explain import *
+from mltk.image import *
 from mltk.project import *
 
+message = """
+Some functions of MLToolKit depends on number of Open Source Python Libraries such as
+- Data Manipulation : Pandas
+- Machine Learning: Statsmodels, Scikit-learn, Catboost
+- Deep Learning: Tensorflow, 
+- Model Interpretability: Shap, Lime
+- Server Framework: Flask
+- Text Processing: BeautifulSoup, TextLab
+- Database Connectivity: SQLAlchemy, PyODBC
+MLToolkit Project acknowledge the creators and contributors of the above libraries for their contribution to the Open Source Community.
+"""
 print('mltk=={}'.format(__version__.strip()))
+print(message)
 ###############################################################################
 #                           SET DISPLAY ENVIRONMENT                           #
 ###############################################################################
