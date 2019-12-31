@@ -1,15 +1,14 @@
 # MLToolKit Project 
 www.mltoolkit.org
-## Current release: PyMLToolkit [v0.1.9]
+## Current release: PyMLToolkit [v0.1.10]
 
-<img src="https://raw.githubusercontent.com/sptennak/MLToolkit/master/MLToolkit.png" height="200">
+<img src="https://raw.githubusercontent.com/mltoolkit/MLToolkit/master/MLToolkit.png" height="200">
 
 MLToolKit (mltk) is a Python package providing a set of user-friendly functions to help building end-to-end machine learning models in data science research, teaching or production focused projects. 
 
-<img src="https://raw.githubusercontent.com/mltoolkit/MLToolKit/master/MLToolkit/image/MLTKProcess.png" height="250">
-
 ## Introduction
 MLToolKit supports all stages of the machine learning application development process.
+<img src="https://raw.githubusercontent.com/mltoolkit/MLToolkit/master/MLToolkit/image/MLTKProcess.png" height="200">
 
 ## Installation
 ```
@@ -897,11 +896,11 @@ limitations under the License.
 ```
 @misc{mltk2019,
   author =  "Sumudu Tennakoon",
-  title = "MLToolKit(mltk): A Simplified Toolkit for End-To-End Machine Learing Projects",
+  title = "MLToolKit(mltk): A Simplified Toolkit for Unifying End-To-End Machine Learing Projects",
   year = 2019,
   publisher = "GitHub",
   howpublished = {\url{https://mltoolkit.github.io/mltk/}},
-  version = "0.1.9"
+  version = "0.1.10"
 }
 ```
 
@@ -917,12 +916,13 @@ limitations under the License.
 - 2019-08-31 [v0.1.7] : Added more data processing functions, Enhanced output formats, Enhanced model deployment, Overall improvements and bug fixes.
 - 2019-09-28 [v0.1.8] : Improved Documentation, Enhancements and bug fixes.
 - 2019-12-07 [v0.1.9] : Added model explainability, Integrate image classification model Deployment, Enhancements and bug fixes.
+- 2019-12-31 [v0.1.10] : Improved data read write functions, Enhancements and bug fixes, Improved Documentation.
 
-## Future Release Plan 
-- TBD [v0.1.10] : Working with Imbalanced Samples, Integrate Cross-validation, Post additional tutorials and examples, Improved Documentation, Enhancements and bug fixes.
-- TBD [v0.1.11] : Building Ensamble Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
-- TBD [v0.1.12]: ML Model Building Projects, Enhancements and bug fixes.
-- 2019-12-31 [v0.1.13]:Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
+## Future Release Plan
+- TBD [v0.1.11] : Working with Imbalanced Samples, Integrate Cross-validation, Post additional tutorials and examples, Improve Documentation, Enhancements and bug fixes.
+- TBD [v0.1.12] : Building Ensamble Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
+- TBD [v0.1.13]: ML Model Building Projects, Enhancements and bug fixes.
+- 2019-12-31 [v0.1.14]:Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
 - TBD [v0.2.0]: Imporved model building and serving frameework and UI, Support more machine learning algorithms, Support multi-class classification and enhanced text analytics functions.
 - TBD [v0.3.0]: Imporved scalability and performance, Automated Machine Learning.
 - TBD [v0.4.0]: Building continious learning models.
