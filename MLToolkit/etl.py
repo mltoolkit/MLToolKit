@@ -16,9 +16,12 @@ Main Features
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
 - Model performance analysis and comparison between models
-- Hyper parameter tuning
+- Cross Validation and Hyper parameter tuning
+- JSON input script for executing model building and scoring tasks.
+- Model Building UI
 - Auto ML (automated machine learning)
-- Serving models via RESTful  API
+- Model Deploymet and Serving via RESTful  API
+
 
 Author
 ------
@@ -27,7 +30,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/sptennak/MLToolkit
+Github: https://github.com/mltoolkit/mltk
 
 License
 -------
@@ -52,14 +55,39 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from mltk.string import *
+from mltk.explore import *
 
-edges_std = ['0', '1p', '1n', '1u', '1m', '1c', '1', '100', '500', 
-             '1K', '2K', '5K', '10K', '20K', '50K', '100K', '500K', 
-             '1M', '2M', '5M', '10M', '100M', '200M', '500M', 
-             '1G', '2G', '5G', '10G', '100G', '200G', '500G',
-             '1T', '2T', '5T', '10T', '100T', '200T', '500T',
-             '1P', '2P', '5P', '10P', '100P', '200P', '500P',
-             '1E']
+def number_unit_example():
+    edges_std = ['0', '1p', '1n', '1u', '1m', '1c', '1', '100', '500', 
+                 '1K', '2K', '5K', '10K', '20K', '50K', '100K', '500K', 
+                 '1M', '2M', '5M', '10M', '100M', '200M', '500M', 
+                 '1G', '2G', '5G', '10G', '100G', '200G', '500G',
+                 '1T', '2T', '5T', '10T', '100T', '200T', '500T',
+                 '1P', '2P', '5P', '10P', '100P', '200P', '500P',
+                 '1E']
+    print(edges_std)
+    
+def get_number_units():    
+    units = {'p':0.000000000001,
+        'n':0.000000001,
+        'u':0.000001,
+        'm':0.001,
+        'c':0.01,
+        'd':0.1,
+        '':1,
+        'D':10,
+        'H':100,
+        'K':1000,
+        'M':1000000,
+        'G':1000000000,
+        'T':1000000000000,
+        'P':1000000000000000,
+        'E':1000000000000000000,
+        'INF':np.inf        
+        }
+    units = pd.DataFrame(data=units.items(), columns=['unit', 'multiplier'])
+    print(units)
+    return units
 
 ###############################################################################
 ##[ I/O FUNCTIONS]#############################################################      
@@ -69,7 +97,7 @@ def read_data_csv(file, separator=',', encoding=None):
     return pd.read_csv(filepath_or_buffer=file, sep=separator, encoding=encoding)
 
 def read_data_pickle(file, compression='infer'):
-    return pd.read_csv(filepath_or_buffer=file, compression=compression)
+    return pd.read_pickle(filepath_or_buffer=file, compression=compression)
     
 def read_data_sql(query=None, server=None, database=None, auth=None):
     """
@@ -267,196 +295,627 @@ def exclude_records(DataFrame, exclude_condition=None, action = 'flag', exclude_
     return DataFrame
 
 ###############################################################################
-##[ CREATING FEATURES - TRANSFORMATIONS]#######################################      
+##[ CREATING FEATURES - TARGET ]###############################################      
 ############################################################################### 
     
-def normalize_variable(DataFrame, variable, method='maxscale', parameters=None, to_variable=None):
-    """
-    Reference: https://en.wikipedia.org/wiki/Normalization_(statistics)
+def set_binary_target(DataFrame, to_variable='_TARGET_', condition_str=None, default=0, null=0, return_variable=False, return_script=False):
+    if condition_str==None: 
+        return DataFrame
     
-    Parameters
-    ----------
-    DataFrame : pandas.DataFrame
-        DataFrame
-    variable : str
-        Numeric variable to normalize
-    method : {'minscale', 'maxscale', 'range', 'zscore', 'mean', 'median'}, default 'maxscale'
-        'minscale' : value/min
-        'maxscale' : value/max
-        'range' : value/abs(max-min)
-        'minmaxfs' : (value-min)/(max-min)
-            Min-Max Feature scaling
-        'minmaxfs_m' : (value-mean)/(max-min)
-            Mean normalization
-        'zscore' : (value-mean)/std
-            Standardization (Z-score Normalization)
-        'mean' : value/mean
-        'median' : value/median
-        
-    Returns
-    -------
-    DataFrame : pandas.DataFrame
-    """ 
+    DataFrame, to_variable = create_binary_variable(DataFrame, to_variable, condition_str, default=default, null=null, return_variable=True)
+
+    parameters = {
+            'condition_str':condition_str,
+            'default':default,
+            'null':null
+            }    
+    script_dict = generate_create_variable_task_script(type='target', out_type='bin', include=False, operation='condition', source=None, destination=to_variable, parameters=parameters)
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+    
+###############################################################################
+##[ CREATING FEATURES - TRANSFORMATIONS]#######################################      
+############################################################################### 
+
+def create_normalized_variable(DataFrame, variable, method='maxscale', parameters=None, to_variable=None, return_variable=False, return_script=False):
     if to_variable==None:
         to_variable = variable
         
     if method=='minscale': #scale=max
-        DataFrame[to_variable] = DataFrame[variable]/DataFrame[variable].min()
+        try:
+            min_ = parameters["min"]
+        except:
+            min_ = DataFrame[variable].min()
+            parameters["min"] = min_
+        DataFrame[to_variable] = DataFrame[variable]/min_
     if method=='maxscale': #scale=max
-        DataFrame[to_variable] = DataFrame[variable]/DataFrame[variable].max()
+        try:
+            max_ = parameters["max"]
+        except:
+            max_ = DataFrame[variable].max()
+            parameters["max"] = max_
+        DataFrame[to_variable] = DataFrame[variable]/max_
     if method=='range': # range = abs(max-min)
-        min_max = abs(DataFrame[variable].max()-DataFrame[variable].min())
+        try:
+            min_ = parameters["min"]
+            max_ = parameters["max"]
+        except:
+            min_ = DataFrame[variable].min()
+            max_ = DataFrame[variable].max()    
+            parameters["min"] = min_
+            parameters["max"] = max_
+        min_max = abs(min_-max_)
         DataFrame[to_variable] = DataFrame[variable]/min_max
     if method=='minmaxfs': # range = (value-min)/(max-min)
-        min_=DataFrame[variable].min()
-        max_=DataFrame[variable].max()
+        try:
+            min_ = parameters["min"]
+            max_ = parameters["max"]
+        except:
+            min_ = DataFrame[variable].min()
+            max_ = DataFrame[variable].max() 
+            parameters["min"] = min_
+            parameters["max"] = max_
         min_max = abs(max_-min_)
         DataFrame[to_variable] = (DataFrame[variable]-min_)/min_max
     if method=='minmaxfs_m': # range = (value-min)/(max-min)
-        min_=DataFrame[variable].min()
-        max_=DataFrame[variable].max()
-        mean = DataFrame[variable].mean()
+        try:
+            min_ = parameters["min"]
+            max_ = parameters["max"]
+            mean_ = parameters["mean"]
+        except:  
+            min_=DataFrame[variable].min()
+            max_=DataFrame[variable].max()
+            mean_ = DataFrame[variable].mean()
+            parameters["min"] = min_
+            parameters["max"] = max_
+            parameters["mean"] = mean_
         min_max = abs(max_-min_)
-        DataFrame[to_variable] = (DataFrame[variable]-mean)/min_max
+        DataFrame[to_variable] = (DataFrame[variable]-mean_)/min_max
     if method=='mean':
-        mean = DataFrame[variable].mean()
-        DataFrame[to_variable] = DataFrame[variable]/mean
+        try:
+            mean_ = parameters["mean"]
+        except:  
+            mean_ = DataFrame[variable].mean()
+            parameters["mean"] = mean_
+        DataFrame[to_variable] = DataFrame[variable]/mean_
     if method=='median':
-        median = DataFrame[variable].median()
-        DataFrame[to_variable] = DataFrame[variable]/median
+        try:
+            median_ = parameters["median"]
+        except:  
+            median_ = DataFrame[variable].median()
+            parameters["median"] = median_
+        DataFrame[to_variable] = DataFrame[variable]/median_
     if method=='zscore':  
-        std = DataFrame[variable].std()
-        mean = DataFrame[variable].mean()
-        DataFrame[to_variable] = (DataFrame[variable] - mean)/std  
-        
-    return DataFrame
-
-def transform_variable(DataFrame, variable, to_variable, operation, parameters, return_variable=False):
-    if operation=='normalize':
-        method = parameters['method']
-        DataFrame = normalize_variable(DataFrame, variable, method=method, to_variable=to_variable)
-    else:
-        pass # other transformations to be implemented
-        
-    if return_variable:
+        try:
+            std_ = parameters["std"]
+            mean_ = parameters["mean"]
+        except: 
+            std_ = DataFrame[variable].std()
+            mean_ = DataFrame[variable].mean()
+            parameters["mean"] = mean_
+            parameters["std"] = std_
+        DataFrame[to_variable] = (DataFrame[variable] - mean_)/std_  
+ 
+    script_dict = generate_create_variable_task_script(type='transform', out_type='cnt', 
+                                                       include=False, operation='normalize', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters)
+     
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
         return DataFrame, to_variable
     else:
-        return DataFrame
+        return DataFrame 
+
+def create_datepart_variable(DataFrame, variable, to_variable=None, part='date', return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}{}'.format(variable,part)
+        
+    try:
+        DataFrame[variable] = pd.to_datetime(DataFrame[variable])
+        if part=='date':
+            DataFrame[to_variable] = DataFrame[variable].dt.date
+        elif part=='year':
+            DataFrame[to_variable] = DataFrame[variable].dt.year
+        elif part=='quarter':
+            DataFrame[to_variable] = DataFrame[variable].dt.quarter
+        elif part=='month':
+            DataFrame[to_variable] = DataFrame[variable].dt.month
+        elif part=='week':
+            DataFrame[to_variable] = DataFrame[variable].dt.week
+        elif part=='day':
+            DataFrame[to_variable] = DataFrame[variable].dt.day  
+        elif part=='dayofweek':
+            DataFrame[to_variable] = DataFrame[variable].dt.dayofweek
+        elif part=='dayofyear':
+            DataFrame[to_variable] = DataFrame[variable].dt.dayofyear
+        elif part=='time':
+            DataFrame[to_variable] = DataFrame[variable].dt.time
+        elif part=='hour':
+            DataFrame[to_variable] = DataFrame[variable].dt.hour
+        elif part=='minute':
+            DataFrame[to_variable] = DataFrame[variable].dt.minute
+        elif part=='second':
+            DataFrame[to_variable] = DataFrame[variable].dt.second
+        elif part=='microsecond':
+            DataFrame[to_variable] = DataFrame[variable].dt.microsecond
+        elif part=='nanosecond':
+            DataFrame[to_variable] = DataFrame[variable].dt.nanosecond
+        else:
+            DataFrame[to_variable] = variable
+    except:
+        DataFrame[to_variable] = variable
+
+    parameters = {'part':part}    
+    script_dict = generate_create_variable_task_script(type='transform', out_type='dat', 
+                                                       include=False, operation='datepart', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters)
+   
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+def create_dateadd_variable(DataFrame, variable, to_variable=None, unit='years', value=0, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}{}{}'.format(variable, value, unit)
+        
+    try:
+        DataFrame[variable] = pd.to_datetime(DataFrame[variable])
+        if part=='years':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(year=value)
+        elif part=='months':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(months=value)
+        elif part=='weeks':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(weeks=value)
+        elif part=='days':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(days=value)
+        elif part=='hours':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(hours=value)
+        elif part=='minutes':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(minutes=value)
+        elif part=='seconds':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(seconds=value)
+        elif part=='microseconds':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(microseconds=value)
+        elif part=='nanoseconds':
+            DataFrame[to_variable] = DataFrame[variable] + pd.DateOffset(nanoseconds=value)        
+    except:
+        DataFrame[to_variable] = variable
+
+    parameters = {
+        'unit':unit, 
+        'value':value
+        }    
+    script_dict = generate_create_variable_task_script(type='transform', out_type='dat', 
+                                                       include=False, operation='dateadd', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters)
+        
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame   
+
+def create_log_variable(DataFrame, variable, base='e', to_variable=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = 'LOG{}'.format(variable)
+        
+    if base=='e':
+        DataFrame[to_variable] = np.log(DataFrame[variable])
+    elif base=='10':
+        DataFrame[to_variable] = np.log10(DataFrame[variable])
+    elif base=='2':
+        DataFrame[to_variable] = np.log2(DataFrame[variable])
+
+    parameters = { 'base':base }
+    script_dict = generate_create_variable_task_script(type='transform', out_type='cnt', 
+                                                       include=False, operation='log', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters) 
+        
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame     
     
-def create_transformed_variables(DataFrame, variable_operations, return_variables=False): #variable_operations = [{'variable':'age', 'to': 'normalized_age', 'operation':'normalize', 'parameters':{'method':'zscore'}},]
-    transformed_variables = []
-    for variable_operation in variable_operations:
-        try:
-            DataFrame, transformed_variable = transform_variable(DataFrame, variable_operation['variable'], variable_operation['to'], variable_operation['operation'], variable_operation['parameters'], return_variable=True)
-            transformed_variables.append(transformed_variable)
-        except:
-            print('ERROR creating transformed variable for {} with {} : {}'.format(variable_operation['variable'], variable_operation['operation'], traceback.format_exc()))  
+def create_exponent_variable(DataFrame, variable, base='e', to_variable=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = 'EXP{}'.format(variable)
+        
+    if base=='e':
+        DataFrame[to_variable] = np.e**DataFrame[variable]
+    elif base=='10':
+        DataFrame[to_variable] = 10**DataFrame[variable]
+    elif base=='2':
+        DataFrame[to_variable] = 2**DataFrame[variable]
+
+    parameters = { 'base':base }
+    script_dict = generate_create_variable_task_script(type='transform', out_type='cnt', 
+                                                       include=False, operation='exponent', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters) 
+        
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+##[ CREATING FEATURES - STR TRANSFORM ]########################################      
+############################################################################### 
+        
+def create_str_count_variable(DataFrame, variable, pattern='*', case_sensitive=True, to_variable=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}CNT{}'.format(variable, remove_special_characters(pattern, replace=''))
+    try:
+        if pattern=='*':
+            DataFrame[to_variable] = DataFrame[variable].str.len()
+        else:
+            DataFrame[to_variable] = DataFrame[variable].str.count(pattern) 
+    except:
+        print('ERROR in create_str_count_variable:\n{}'.format(traceback.format_exc()))
+        DataFrame[to_variable] = DataFrame[variable]
+
+    parameters = { 'pattern':pattern, 'case_sensitive':case_sensitive }
+    script_dict = generate_create_variable_task_script(type='transform_str', out_type='cnt', 
+                                                       include=False, operation='strcount', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters) 
             
-    if return_variables:
-        return DataFrame, transformed_variables
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
     else:
-        return DataFrame
+        return DataFrame 
+ 
+def create_str_normalized_variable(DataFrame, variable, to_case='lower', chars='keep', numbers='remove', spchar='remove', space='remove', to_variable=None, return_variable=False, return_script=False):
+
+    if to_variable==None:
+        to_variable = '{}'.format(variable)
     
-def create_date_difference_variable(DataFrame, date_variable1, date_variable2, difference_variable=None, difference_unit='D', return_variable=False):
-    if difference_variable==None:
-        difference_variable = '{}DIFF{}'.format(date_variable2,date_variable1)
+    try:    
+        DataFrame[to_variable] = DataFrame[variable]
+        
+        if to_case=='lower':
+            DataFrame[to_variable] = DataFrame[variable].str.lower()
+        if to_case=='upper':
+            DataFrame[to_variable] = DataFrame[variable].str.upper()
+        if numbers=='remove':
+            DataFrame[to_variable] = DataFrame[variable].str.replace('\d','')    
+        if spchar=='remove':
+            DataFrame[to_variable] = DataFrame[variable].str.replace('\W','')   
+        if space=='remove':
+            DataFrame[to_variable] = DataFrame[variable].str.replace('\s','')       
+        if chars=='remove':
+            DataFrame[to_variable] = DataFrame[variable].str.replace('\w','') 
+    except:
+        print('ERROR in create_str_normalized_variable:\n{}'.format(traceback.format_exc()))
+        DataFrame[to_variable] = DataFrame[variable]
+
+    parameters = { 
+        'to_case':to_case, 
+        'chars':chars,
+        'numbers':numbers,
+        'spchar':spchar, 
+        'space':space
+    }
+    script_dict = generate_create_variable_task_script(type='transform_str', out_type='str', 
+                                                       include=False, operation='normalize', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters) 
+        
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
     else:
-        difference_variable = difference_variable
+        return DataFrame  
+
+def create_str_extract_variable(DataFrame, variable, pattern='\w+', case_sensitive=True, to_variable=None, return_variable=False, return_script=False): 
+    if to_variable==None:
+        to_variable = 'variableEXT'.format(variable)
+    try:
+        if case_sensitive:    
+            DataFrame[to_variable] = DataFrame[variable].str.extract('({})'.format(pattern))
+        else:
+            DataFrame[to_variable] = DataFrame[variable].str.extract('({})'.format(pattern), flags=re.IGNORECASE)
+    except:
+        print('ERROR in create_str_extract_variable:\n{}'.format(traceback.format_exc()))
+        DataFrame[to_variable] = DataFrame[variable]
+
+    parameters = { 
+        'pattern':pattern, 
+        'case_sensitive':case_sensitive
+    }
+    script_dict = generate_create_variable_task_script(type='transform_str', out_type='str', 
+                                                       include=False, operation='extract', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters) 
+        
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+##[ CREATING FEATURES - MULTI VARIABLE ]#######################################      
+###############################################################################    
+def create_operation_mult_variable(DataFrame, expression_str='0', to_variable=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}'.format(expression_str)
     
     try:
-        DataFrame[date_variable1] = pd.to_datetime(DataFrame[date_variable1])
-        DataFrame[date_variable2] = pd.to_datetime(DataFrame[date_variable2])        
-        DataFrame[difference_variable] = DataFrame[date_variable2] - DataFrame[date_variable1]
-        DataFrame[difference_variable]=DataFrame[difference_variable]/np.timedelta64(1,difference_unit)
+        DataFrame[to_variable] = DataFrame.eval(expression_str)
     except:
-        DataFrame[difference_variable] = None
-        print('Date Type Error: {}, {} '.format(date_variable1, date_variable2, traceback.format_exc()))  
+        print('ERROR in create_operation_mult_variable:\n{}'.format(traceback.format_exc()))
 
-    if return_variable:
-        return DataFrame, difference_variable
+    parameters = { 'expression_str':expression_str}
+    script_dict = generate_create_variable_task_script(type='operation_mult', out_type='cnt', 
+                                                       include=False, operation='expression', 
+                                                       source=None, destination=to_variable, 
+                                                       parameters=parameters) 
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
     else:
-        return DataFrame
+        return DataFrame  
 
-def create_date_difference_variables(DataFrame, date_differences, return_variables=False):
-    date_diffeence_variables = []
-    
-    for date_difference in date_differences:
-        try:
-            DataFrame, date_diffeence_variable = create_date_difference_variable(DataFrame, date_difference['date_variable1'], date_difference['date_variable2'], date_difference['difference_variable'], date_difference['difference_unit'], return_variable=True)
-            date_diffeence_variables.append(date_diffeence_variable)            
-        except:
-            print('ERROR creating date difference variable between {} with {} : {}'.format(date_difference['date_variable1'], date_difference['date_variable2'], traceback.format_exc()))  
+###############################################################################
+##[ CREATING FEATURES - SEQUENCE ORDER ]#######################################      
+###############################################################################
+def create_sequence_order_variable(DataFrame, variable1a, variable2a, variable1b, variable2b, output='binary', to_variable=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}{}SEQ{}{}'.format(variable1a, variable2a, variable1b, variable2b)
         
-    if return_variables:
-        return DataFrame, date_diffeence_variables
-    else:
-        return DataFrame    
+    try:
+        DataFrame[to_variable] = DataFrame[variable] ########### NEED UPDATE !!!!
+    except:
+        print('ERROR in create_sequence_order_variable:\n{}'.format(traceback.format_exc()))
+        DataFrame[to_variable] = DataFrame[variable]
 
-def create_numeric_difference_variable(DataFrame, variable1, variable2, difference_variable=None, return_variable=False):
-    if difference_variable==None:
-        difference_variable = '{}DIFF{}'.format(variable1, variable2)
+    parameters = { 'output':output }
+    script_dict = generate_create_variable_task_script(type='sequence', out_type='cnt', 
+                                                       include=False, operation='seqorder', 
+                                                       source=[variable1a, variable2a, variable1b, variable2b], 
+                                                       destination=to_variable, 
+                                                       parameters=parameters) 
+        
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
     else:
-        difference_variable = difference_variable
+        return DataFrame  
+    
+###############################################################################
+##[ CREATING FEATURES - DIFFERENCES ]##########################################      
+############################################################################### 
+def create_numeric_difference_variable(DataFrame, variable1, variable2, multiplier=1, onerror=None, to_variable=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}DIFF{}'.format(variable1, variable2)
     
     try:
         DataFrame[variable1] = pd.to_numeric(DataFrame[variable1], errors='coerce')
         DataFrame[variable2] = pd.to_numeric(DataFrame[variable2], errors='coerce')        
-        DataFrame[difference_variable] = DataFrame[variable1] - DataFrame[variable2]
+        DataFrame[to_variable] = multiplier*(DataFrame[variable1] - DataFrame[variable2])
     except:
-        DataFrame[difference_variable] = None
+        DataFrame[to_variable] = None
+        print('Data Type Error: {}, {} '.format(variable1, variable2, traceback.format_exc()))  
+
+    parameters = { 
+                    'multiplier':multiplier,
+                    'onerror': onerror
+    }
+    script_dict = generate_create_variable_task_script(type='comparison', out_type='cnt', 
+                                                       include=False, operation='numdiff', 
+                                                       source=[variable1, variable2], 
+                                                       destination=to_variable, 
+                                                       parameters=parameters) 
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+def create_numeric_ratio_variable(DataFrame, variable1, variable2, multiplier=1, onerror=None, to_variable=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}DIV{}'.format(variable1, variable2)
+    
+    try:
+        DataFrame[variable1] = pd.to_numeric(DataFrame[variable1], errors='coerce')
+        DataFrame[variable2] = pd.to_numeric(DataFrame[variable2], errors='coerce')        
+        DataFrame[to_variable] = multiplier*(DataFrame[variable1]/DataFrame[variable2])
+    except:
+        DataFrame[to_variable] = None
+        print('Data Type Error: {}, {} '.format(variable1, variable2, traceback.format_exc()))  
+
+    parameters = { 
+                    'multiplier':multiplier,
+                    'onerror': onerror
+    }
+    script_dict = generate_create_variable_task_script(type='comparison', out_type='cnt', 
+                                                       include=False, operation='ratio', 
+                                                       source=[variable1, variable2], 
+                                                       destination=to_variable, 
+                                                       parameters=parameters) 
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+    
+def create_date_difference_variable(DataFrame, variable1, variable2, to_variable=None, unit='day', onerror=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}DIFF{}'.format(variable1,variable2)
+    
+    try:
+        DataFrame[variable1] = pd.to_datetime(DataFrame[variable1])
+        DataFrame[variable2] = pd.to_datetime(DataFrame[variable2])        
+        DataFrame[to_variable] = DataFrame[variable2] - DataFrame[variable1]
+        DataFrame[to_variable]=DataFrame[to_variable]/np.timedelta64(1,unit)
+    except:
+        DataFrame[to_variable] = None
         print('Date Type Error: {}, {} '.format(variable1, variable2, traceback.format_exc()))  
 
-    if return_variable:
-        return DataFrame, difference_variable
-    else:
-        return DataFrame
-
-def create_numeric_difference_variables(DataFrame, numeric_differences, return_variables=False):
-    numeric_difference_variables = []
+    parameters = { 
+                    'unit':unit,
+                    'onerror': onerror
+    }
+    script_dict = generate_create_variable_task_script(type='comparison', out_type='cnt', 
+                                                       include=False, operation='datediff', 
+                                                       source=[variable1, variable2], 
+                                                       destination=to_variable, 
+                                                       parameters=parameters) 
     
-    for numeric_difference in numeric_differences:
-        try:
-            DataFrame, numeric_difference_variable = create_numeric_difference_variable(DataFrame, numeric_difference['date_variable1'], numeric_difference['date_variable2'], numeric_difference['difference_variable'], numeric_difference['difference_unit'], return_variable=True)
-            numeric_difference_variables.append(numeric_difference_variable)            
-        except:
-            print('ERROR creating date difference variable between {} with {} : {}'.format(numeric_difference['date_variable1'], numeric_difference['date_variable2'], traceback.format_exc()))  
-        
-    if return_variables:
-        return DataFrame, numeric_difference_variables
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
     else:
-        return DataFrame     
+        return DataFrame    
+
+###############################################################################
+##[ CREATING FEATURES - STR COMPARISON ]#######################################      
+############################################################################### 
+def create_str_comparison_variable(DataFrame, variable1, variable2, to_variable=None, operation='levenshtein', parameters={}, return_variable=False, return_script=False):    
+    if to_variable==None:
+        to_variable = '{}SIM{}'.format(variable1,variable2)
+        
+    try:
+        case_sensitive = parameters['case_sensitive']
+    except:
+        case_sensitive = True
+        
+    if operation=='levenshtein':
+        try:
+            normalize = parameters['normalize']
+        except:
+            normalize = False
+        DataFrame[to_variable] = np.vectorize(damerau_levenshtein_distance)(DataFrame[variable1], DataFrame[variable2], case_sensitive, normalize)
+
+    elif operation=='jaccard':
+        try:
+            method=parameters['method']
+        except:
+            method='substring'
+        try:
+            min_length=parameters['min_length']
+        except:
+            min_length=1
+        try:
+            max_length=parameters['max_length']
+        except:    
+            max_length=np.inf
+            
+        DataFrame[to_variable] = np.vectorize(jaccard_index)(DataFrame[variable1], DataFrame[variable2], method, case_sensitive, min_length, max_length)
+
+    script_dict = generate_create_variable_task_script(type='comparison_str', out_type='cnt', 
+                                                       include=False, operation=operation, 
+                                                       source=[variable1, variable2], 
+                                                       destination=to_variable, 
+                                                       parameters=parameters)
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame      
+
+###############################################################################
+##[ CREATING FEATURES - BINARY VARIABLES]######################################      
+############################################################################### 
+        
+def create_binary_variable(DataFrame, to_variable, condition_str, default=0, null=0, return_variable=False, return_script=False):
+    
+    if to_variable==None:
+        to_variable = '{}'.format(condition_str)
+
+    try:    
+        DataFrame[to_variable] = DataFrame.eval(condition_str).astype('int8').fillna(null)
+        DataFrame.loc[DataFrame[to_variable].isna(), to_variable] = default
+    except:
+        print('Error in creating the binary variable {}:\n{}\n'.format(condition_str, traceback.format_exc()))
+        print('Check variable rule set !')
+
+    parameters = { 
+                    'condition_str':condition_str,
+                    'default': default,
+                    'null': null
+    }
+    script_dict = generate_create_variable_task_script(type='condition', out_type='bin', 
+                                                       include=False, operation='condition', 
+                                                       source=None, 
+                                                       destination=to_variable, 
+                                                       parameters=parameters) 
+            
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
     
 ###############################################################################
-##[ CREATING FEATURES - CATEGORY]##############################################      
+##[ CREATING FEATURES - CATEGORY LABELS]#######################################      
 ############################################################################### 
-    
-def merge_categories(DataFrame, merge_categories, return_variables=False):
-    """
-    Parameters
-    ----------
-    DataFrame : pandas.DataFrame
-        DataFrame
-    merge_categories :  [{},]
-        e.g. merge_categories = [{'variable':'grade', category_variable='grade', 'group_value':'A', 'values':['A+', 'A', A-']},] 
-    
-    Returns
-    -------
-    DataFrame : pandas.DataFrame
-    """
-    category_variables = []
-    
-    for merge in merge_categories:
-        try:
-            DataFrame[merge['category_variable']] = DataFrame[merge['variable']].replace(to_replace=merge['values'], value=merge['group_value'])
-            category_variables.append(merge['category_variable'])
-        except:
-            print('ERROR merging categories of variable {}: {}'.format(merge['variable'], traceback.format_exc()))  
-
-    if return_variables:
-        return DataFrame, category_variables
-    else:
-        return DataFrame
-
+  
 def num_label_to_value(num_label):
     units = {'p':0.000000000001,
         'n':0.000000001,
@@ -529,274 +988,476 @@ def edge_labels_to_values(edge_labels, left_inclusive=False, right_inclusive=Fal
     edge_values.append(num_label_to_value(edge_labels[n_bins]))
     return edge_values,bin_labels
 
-def set_binary_target(DataFrame, target_condition=None, target_variable='_TARGET_'):
-    if target_condition==None: 
-        return DataFrame
+###############################################################################
+##[ CREATING FEATURES - CATEGORY]##############################################      
+###############################################################################     
     
-    try:        
-        DataFrame[target_variable] = DataFrame.eval(target_condition).astype('int8')
+def create_categorical_variable(DataFrame, variable, to_variable, labels_str, right_inclusive=True, default='OTHER', null='NA', return_variable=False, return_script=False):
+    
+    if to_variable==None:
+        to_variable = '{}GRP'.format(variable)
+        
+    try:
+        default_ = '0_{}'.format(default)
+        null_ = '0_{}'.format(null)
     except:
-        print('Error in creating the target variable {}:\n{}\n'.format(target_condition, traceback.format_exc()))
-        print('Check variable setting !')
-    return DataFrame  
+        default_ = '0_Other'
+        null_ = '0_NA'
 
-def numeric_to_category(DataFrame, variable, str_labels, category_variable=None, right_inclusive=True, print_output=False, return_variable=False):
-    """
-    Parameters
-    ----------
-    DataFrame : pandas.DataFrame
-        DataFrame
-    variable : str
-        Numeric variable to categorize
-    str_labels : str []
-        Edge labels with number unit as postfix
-            'p':0.000000000001,
-            'n':0.000000001,
-            'u':0.000001,
-            'm':0.001,
-            'c':0.01,
-            'd':0.1,
-            '':1,
-            'D':10,
-            'H':100,
-            'K':1000,
-            'M':1000000,
-            'G':1000000000,
-            'T':1000000000000,
-            'P':1000000000000000,
-            'INF':np.inf        
-    category_variable: str, optional, default None
-        Name of the new variable.
-    right_inclusive : bool, default True
-        Include right edge. Activates right_inclusive=True if False
-    print_output : bool, default False
-        Print result
-    return_variable : bool, default False
-        Return categorical variable name        
-    Returns
-    -------
-    DataFrame : pandas.DataFrame
-    category_variable : str
-    """
-    edge_values, bin_labels = edge_labels_to_values(str_labels, left_inclusive=not right_inclusive, right_inclusive=right_inclusive)
-
-    if category_variable==None:
-        category_variable = '{}GRP'.format(variable)
+    edge_values, bin_labels = edge_labels_to_values(labels_str, left_inclusive=not right_inclusive, right_inclusive=right_inclusive)
         
-    DataFrame[category_variable] = pd.cut(DataFrame[variable], bins=edge_values, labels=bin_labels, right=right_inclusive, include_lowest=True)
-    
-    if print_output:
-        print(DataFrame.groupby(by=category_variable)[category_variable].count())
+    DataFrame[to_variable] = pd.cut(DataFrame[variable], bins=edge_values, labels=bin_labels, right=right_inclusive, include_lowest=True).astype('object')
+
+    DataFrame.loc[DataFrame[variable].isna(), to_variable] = null_
+    DataFrame.loc[DataFrame[to_variable].isna(), to_variable] = default_
+
+    parameters = { 
+                    'labels_str':labels_str,
+                    'right_inclusive': right_inclusive,
+                    'default': default,
+                    'null': null
+    }
+    script_dict = generate_create_variable_task_script(type='category', out_type='cat', 
+                                                       include=False, operation='bucket', 
+                                                       source=variable, 
+                                                       destination=to_variable, 
+                                                       parameters=parameters) 
         
-    if return_variable:
-        return DataFrame, category_variable
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
     else:
-        return DataFrame
+        return DataFrame 
 
-def create_categorical_variables(DataFrame, buckets, return_variables=False): #e.g. buckets =[{'category_variable':'AgeGRP', 'variable':'age', 'str_labels':['0', '20', '30', '40', '50', '60', 'INF']},]
-    """
-    Parameters
-    ----------
-    DataFrame : pandas.DataFrame
-        DataFrame
-    buckets :  list(dict) [{},]
-        e.g. buckets =[{'variable':'age', 'category_variable':'ageGRP', 'str_labels':['0', '20', '30', '40', '50', '60', 'INF']},]
-    return_variable: bool, default False
+def merge_categories(DataFrame, variable, to_variable, values, group_value, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = variable
     
-    Returns
-    -------
-    DataFrame : pandas.DataFrame
-    """
-    category_variables = []
-    for bucket in buckets:
-        try:
-            DataFrame, category_variable = numeric_to_category(DataFrame=DataFrame, variable=bucket['variable'], str_labels=bucket['str_labels'], right_inclusive=bucket['right_inclusive'], print_output=False,  return_variable=True)
-            category_variables.append(category_variable)
-        except:
-            print('ERROR convering {} to buckets: {}'.format(bucket['variable'], traceback.format_exc()))
-
-    if return_variables:
-        return DataFrame, category_variables
-    else:
-        return DataFrame
-    
-def variable_to_binary(DataFrame, str_condition, category_variable=None, fill_missing=0, print_output=False, return_variable=False):
-    """
-    Parameters
-    ----------
-    DataFrame : pandas.DataFrame
-        DataFrame
-    variable : str
-        Numeric variable to categorize
-    str_condition : str
-        Conditional statemnt.
-    category_variable: str, optional, default None
-        Name of the new variable.
-    fill_missing : int8, default 0
-        Value to fill missing or NaN
-    print_output : bool, default False
-        Print result
-    return_variable : bool, default False
-        Return categorical variable name.       
-    Returns
-    -------
-    DataFrame : pandas.DataFrame
-    category_variable : str
-    """
-    if category_variable==None:
-        category_variable = '{}'.format(str_condition)
-    else:
-        category_variable = category_variable
+    try:    
+        DataFrame[to_variable] = DataFrame[variable].replace(to_replace=values, value=group_value)
+    except:
+        print('ERROR in creating the categorical variable merge {}:\n{}\n'.format(variable, traceback.format_exc()))
+        print('Check variable rule set !')
         
-    DataFrame[category_variable] = DataFrame.eval(str_condition).astype('int8').fillna(fill_missing)
+    parameters = { 
+                    'group_value':group_value,
+                    'values': values
+    }
+    script_dict = generate_create_variable_task_script(type='category_merge', out_type='cat', 
+                                                       include=False, operation='catmerge', 
+                                                       source=variable, 
+                                                       destination=to_variable, 
+                                                       parameters=parameters)     
 
-        
-    if print_output:
-        print(DataFrame.groupby(by=category_variable)[category_variable].count())
-        
-    if return_variable:
-        return DataFrame, category_variable
-    else:
-        return DataFrame
-
-def create_binary_variables(DataFrame, conditions, return_variables=False): #e.g. conditions = [{'bin_variable':'CapitalGainPositive', 'str_condition':"capitalgain>0"},]
-    """
-    Parameters
-    ----------
-    DataFrame : pandas.DataFrame
-        DataFrame
-    conditions :  [{},]
-        e.g. conditions = [{'bin_variable':'CapitalGainPositive', 'str_condition':"capitalgain>0"},] 
-    return_variable: bool, default False
-    
-    Returns
-    -------
-    DataFrame : pandas.DataFrame
-    """
-    bin_variables = []
-    for condition in conditions:
-        try:
-            DataFrame, category_variable = variable_to_binary(DataFrame, condition['str_condition'], category_variable=condition['bin_variable'], fill_missing=0, print_output=False, return_variable=True)
-            bin_variables.append(category_variable)
-        except:
-            print('ERROR creating binary variable {} = {} to buckets: {}'.format(condition['bin_variable'], condition['str_condition'], traceback.format_exc()))  
-
-    if return_variables:
-        return DataFrame, bin_variables
-    else:
-        return DataFrame
-
-def variable_pair_equality(DataFrame, variable1, variable2, category_variable, return_variable=False):
-    DataFrame.loc[(DataFrame[variable1]==DataFrame[variable2]), category_variable] = 'EQ'
-    DataFrame.loc[(DataFrame[variable1]!=DataFrame[variable2]), category_variable] = 'DF'
-    DataFrame.loc[(DataFrame[variable1].isna()) | (DataFrame[variable2].isna()), category_variable] = 'ON'
-    DataFrame.loc[(DataFrame[variable1].isna()) & (DataFrame[variable2].isna()), category_variable] = 'BN'
-    
-    if return_variable:
-        return DataFrame, category_variable
-    else:
-        return DataFrame
-    
-def create_variable_pair_equality(DataFrame, variable_pairs, return_variables=False): #variable_pair = [{'variable1':'YearManufactured', 'variable2':'YearRegistered', 'category_variable':'Year'}]
-    category_variables = []
-    for variable_pair in variable_pairs:
-        try:
-            DataFrame, category_variable = variable_pair_equality(DataFrame, variable_pair['variable1'], variable_pair['variable2'], variable_pair['category_variable'], return_variable=True)
-            category_variables.append(category_variable)
-        except:
-            print('ERROR creating equality variable for {} and {} : {}'.format(variable_pair['variable1'], variable_pair['variable2'], traceback.format_exc()))  
-
-    if return_variables:
-        return DataFrame, category_variables
-    else:
-        return DataFrame
-
-def count_characters(DataFrame, variable, criteria='*', string_count_variable=None, return_variable=False):    
-    if string_count_variable==None:
-        string_count_variable = '{}CNT{}'.format(variable, remove_special_characters(criteria, replace=''))
-    else:
-        string_count_variable = string_count_variable
-    
-    if criteria=='*':
-        DataFrame[string_count_variable] = DataFrame[variable].str.len()
-    else:
-        DataFrame[string_count_variable] = DataFrame[variable].str.count(criteria) 
-            
-    if return_variable:
-        return DataFrame, string_count_variable
-    else:
-        return DataFrame
-    
-def create_string_count_variables(DataFrame, string_counts, return_variables=False):
-    string_count_variables = []
-    for string_count in string_counts:
-        try:
-            DataFrame, string_count_variable = count_characters(DataFrame, string_count['variable'], string_count['criteria'], string_count['count_variable'], return_variable=True)
-            string_count_variables.append(string_count_variable)            
-        except:
-            print('ERROR creating string count variable {} counting {} : {}'.format(string_counts['variable'], string_counts['criteria'], traceback.format_exc()))  
-        
-    if return_variables:
-        return DataFrame, string_count_variables
-    else:
-        return DataFrame        
-    
-def create_string_similarity_variable(DataFrame, variable1, variable2, string_similarity_variable=None, metric=None, case_sensitive=True, min_length=1, max_length=np.inf, normalize=False, return_variable=False):
-    if string_similarity_variable==None:
-        string_similarity_variable = '{}SIM{}'.format(variable1,variable2)
-    else:
-        string_similarity_variable = string_similarity_variable
-    
-    if metric=='levenshtein':
-        DataFrame[string_similarity_variable] = np.vectorize(damerau_levenshtein_distance)(DataFrame[variable1], DataFrame[variable2], case_sensitive, normalize)
-    elif metric=='jaccard':
-        method='substring'
-        DataFrame[string_similarity_variable] = np.vectorize(jaccard_index)(DataFrame[variable1], DataFrame[variable2], method, case_sensitive, min_length, max_length)
-
-    if return_variable:
-        return DataFrame, string_similarity_variable
-    else:
-        return DataFrame
-
-def create_string_similarity_variables(DataFrame, string_similarity, return_variables=False):
-    string_similarity_variables = []
-    for similarity in string_similarity:
-        try:
-            try:
-                min_length = similarity['parameters']['min_length']
-                max_length = similarity['parameters']['max_length']
-                normalize = similarity['parameters']['normalize']
-            except:
-                min_length = 1, 
-                max_length = np.inf
-                normalize = False
-            DataFrame, string_similarity_variable = create_string_similarity_variable(DataFrame, similarity['variable1'], similarity['variable2'], similarity['string_similarity_variable'], similarity['metric'], similarity['case_sensitive'], min_length, max_length, normalize, return_variable=True)
-            string_similarity_variables.append(string_similarity_variable)            
-        except:
-            print('ERROR creating string similarity {} between variables {} and {}: {}'.format(similarity['metric'], similarity['variable1'], similarity['variable2'], traceback.format_exc()))  
-        
-    if return_variables:
-        return DataFrame, string_similarity_variables
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
     else:
         return DataFrame  
     
-def create_target_variable(DataFrame, target, return_variable=False):
-    target_variables = []
+###############################################################################
+##[ CREATING FEATURES - ENTITY (DICTIONARY) ]##################################      
+###############################################################################
+def create_entity_variable(DataFrame, variable, to_variable, dictionary, match_type=None, default='OTHER', null='NA', return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}GRP'.format(variable)
+              
+    DataFrame[to_variable]=DataFrame[variable] 
     
-    for tgt in target:
+    for entity in dictionary: 
         try:
-            target_variable=tgt['target_variable']
-            target_condition=tgt['str_condition'] 
-            DataFrame = set_binary_target(DataFrame, target_condition=target_condition, target_variable=target_variable)
-            target_variables.append(target_variable)
+            case=entity['case']
         except:
-            print('ERROR creating target variable {} = {} :\n {}'.format(target_variable, target_condition, traceback.format_exc()))  
+            case=True
+                
+        if (match_type=='values') or ('values' in  entity.keys()):
+            if case==True:
+                DataFrame.loc[DataFrame[variable].isin(entity['values']), to_variable] = entity['entity']
+            else:
+                values = [x.lower() for x in entity['values']] 
+                DataFrame.loc[DataFrame[variable].str.lower().isin(values), to_variable] = entity['entity']
+        elif (match_type=='values') or ('pattern' in entity.keys()):
+            DataFrame.loc[DataFrame[variable].fillna('').str.contains(pat=entity['pattern'], case=case), to_variable] = entity['entity']
+        else:
+            print('Entity {} not created !'.format(entity))
+            
+    DataFrame.loc[DataFrame[variable].isna(), to_variable] = null
+    DataFrame.loc[DataFrame[to_variable].isna(), to_variable] = default
 
-    if return_variable:
-        return DataFrame, target_variables
-    else:
-        return DataFrame
+    parameters = { 
+                    'match_type':match_type,
+                    'dictionary': dictionary,
+                    'default': default,
+                    'null': null
+    }
+    script_dict = generate_create_variable_task_script(type='entity', out_type='cat', 
+                                                       include=False, operation='dictionary', 
+                                                       source=variable, 
+                                                       destination=to_variable, 
+                                                       parameters=parameters)  
     
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+##[ CREATING FEATURES - PAIR EQUALITY ]########################################      
+###############################################################################
+def create_pair_equality_variable(DataFrame, variable1, variable2, to_variable, magnitude=False, case=True, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = '{}CMP{}'.format(variable1,variable2)
+        
+    DataFrame.loc[(DataFrame[variable1]==DataFrame[variable2]), to_variable] = 'EQ'
+    DataFrame.loc[(DataFrame[variable1]!=DataFrame[variable2]), to_variable] = 'DF'
+    DataFrame.loc[(DataFrame[variable1].isna()) | (DataFrame[variable2].isna()), to_variable] = 'ON'
+    DataFrame.loc[(DataFrame[variable1].isna()) & (DataFrame[variable2].isna()), to_variable] = 'BN'
+
+    parameters = { 
+                    'magnitude':magnitude,
+                    'case': case
+    }
+    script_dict = generate_create_variable_task_script(type='pair_equality', out_type='cat', 
+                                                       include=False, operation='pairequality', 
+                                                       source=[variable1, variable2], 
+                                                       destination=to_variable, 
+                                                       parameters=parameters)  
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+        
+###############################################################################
+##[ CREATING FEATURES TASK - TARGET ]##########################################      
+###############################################################################
+def create_target_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    to_variable = rule_set['variables']['destination']
+    operation = rule_set['operation']    
+    parameters = rule_set['parameters']
+    
+    target_condition_str = parameters['condition_str']
+    default = parameters['default']
+    null = parameters['null']
+    
+    DataFrame, to_variable, script_dict = set_binary_target(DataFrame, condition_str=target_condition_str, 
+                                               to_variable=to_variable, default=default, null=null, return_variable=True, return_script=True)
+
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+        
+###############################################################################
+##[ CREATING FEATURES TASK - TRANSFORM ]#######################################      
+###############################################################################
+def create_transformed_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    variable = rule_set['variables']['source']
+    to_variable = rule_set['variables']['destination']
+    operation = rule_set['operation']    
+    parameters = rule_set['parameters']
+    
+    if operation=='normalize':
+        method = rule_set['parameters']['method']        
+        DataFrame, to_variable, script_dict  = create_normalized_variable(DataFrame, variable, method=method, parameters=parameters, to_variable=to_variable, return_variable=True, return_script=True)
+    elif operation=='datepart':
+        part = rule_set['parameters']['part']  
+        DataFrame, to_variable, script_dict  = create_datepart_variable(DataFrame, variable, part=part, to_variable=to_variable, return_variable=True, return_script=True)
+    elif operation=='dateadd':
+        unit = rule_set['parameters']['unit']  
+        value = rule_set['parameters']['value']  
+        DataFrame, to_variable, script_dict  = create_dateadd_variable(DataFrame, variable, unit=unit, value=value, to_variable=to_variable, return_variable=True, return_script=True)
+    elif operation=='log':
+        base = rule_set['parameters']['base']  
+        DataFrame, to_variable, script_dict  = create_log_variable(DataFrame, variable, base=base, to_variable=to_variable, return_variable=True, return_script=True)
+    elif operation=='exponent':
+        base = rule_set['parameters']['base']  
+        DataFrame, to_variable, script_dict  = create_exponent_variable(DataFrame, variable, base=base, to_variable=to_variable, return_variable=True, return_script=True)
+    else:
+        pass # other transformations to be implemented
+        
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame  
+
+
+def create_str_transformed_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    variable = rule_set['variables']['source']
+    to_variable = rule_set['variables']['destination']
+    operation = rule_set['operation']    
+    parameters = rule_set['parameters']
+
+    if operation=='strcount':
+        pattern = parameters['pattern']
+        case_sensitive = parameters['case_sensitive']
+        DataFrame, to_variable, script_dict = create_str_count_variable(DataFrame, variable, pattern=pattern, case_sensitive=case_sensitive, to_variable=to_variable, return_variable=True, return_script=True)        
+    elif operation=='normalize':
+        to_case = parameters['to_case']
+        chars = parameters['chars']
+        numbers = parameters['numbers'] 
+        spchar = parameters['spchar']
+        space = parameters['space']        
+
+        DataFrame, to_variable, script_dict = create_str_normalized_variable(DataFrame, variable, 
+                                                                to_case=to_case, 
+                                                                chars=chars, 
+                                                                numbers=numbers, 
+                                                                spchar=spchar, 
+                                                                space=space, 
+                                                                to_variable=None, return_variable=False, return_script=True)
+    elif operation=='extract':
+        pattern = parameters['pattern']
+        case_sensitive = parameters['case_sensitive']
+        DataFrame, to_variable, script_dict = create_str_extract_variable(DataFrame, variable, pattern=pattern, 
+                                                             case_sensitive=case_sensitive, 
+                                                             to_variable=to_variable, return_variable=True, return_script=True)   
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame      
+
+###############################################################################
+##[ CREATING FEATURES TASK - MLTI VARIAVLE ]###################################      
+###############################################################################
+        
+def create_operation_mult_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    variable = rule_set['variables']['source']
+    to_variable = rule_set['variables']['destination']
+    operation = rule_set['operation']    
+    parameters = rule_set['parameters']    
+    expression_str = parameters['expression_str']
+    
+    DataFrame, to_variable, script_dict = create_operation_mult_variable(DataFrame, expression_str=expression_str, 
+                                                            to_variable=to_variable, return_variable=True, return_script=True)
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+##[ CREATING FEATURES TASK - SEQUENCE ORDER ]##################################      
+###############################################################################
+def create_sequence_order_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    variable1a = rule_set['variables']['source1a']
+    variable2a = rule_set['variables']['source2a']
+    variable1b = rule_set['variables']['source1b']
+    variable2b = rule_set['variables']['source2b']
+    to_variable = rule_set['variables']['destination']
+    
+    DataFrame, to_variable, script_dict = create_sequence_order_variable(DataFrame, variable1a, variable2a, variable1b, variable2b, output='binary', 
+                                                            to_variable=to_variable, return_variable=True, return_script=True)
+        
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame       
+    
+###############################################################################
+##[ CREATING FEATURES TASK - COMPARISON ]######################################      
+###############################################################################
+def create_comparison_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    variable1 = rule_set['variables']['source1']
+    variable2 = rule_set['variables']['source2']
+    to_variable = rule_set['variables']['destination']
+    operation = rule_set['operation']
+    parameters = rule_set['parameters']
+    try:
+        multiplier = parameters['multiplier']
+        unit = parameters['unit']
+    except:
+        multiplier=1
+        unit = 'days'
+    onerror = None # parameters['onerror']
+    
+    if operation=='numdiff':        
+        DataFrame, to_variable, script_dict = create_numeric_difference_variable(DataFrame, variable1, variable2, multiplier=multiplier, onerror=onerror, to_variable=to_variable, return_variable=True, return_script=True)
+    elif operation=='datediff':
+        DataFrame, to_variable, script_dict = create_date_difference_variable(DataFrame, variable1, variable2, unit=unit, onerror=onerror, to_variable=to_variable, return_variable=True, return_script=True)
+
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame       
+    
+def create_str_comparison_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    variable1 = rule_set['variables']['source1']
+    variable2 = rule_set['variables']['source2']
+    to_variable = rule_set['variables']['destination']
+    operation = rule_set['operation']    
+    parameters = rule_set['parameters']
+                
+    DataFrame, to_variable, script_dict = create_str_comparison_variable(DataFrame, variable1=variable1, variable2=variable2, to_variable=to_variable, operation=operation, parameters=parameters, 
+                                                                         return_variable=True, return_script=True)
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+##[ CREATING FEATURES TASK - BINARY VARIABLE ]#################################      
+###############################################################################
+def create_binary_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    #variable = rule_set['variables']['source']
+    to_variable = rule_set['variables']['destination']
+    parameters = rule_set['parameters']
+    condition_str = parameters['condition_str']
+    default = parameters['default']
+    null = parameters['null']
+    
+    DataFrame, to_variable, script_dict = create_binary_variable(DataFrame, to_variable, condition_str, default, null, 
+                                                                 return_variable=True, return_script=True)
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+##[ CREATING FEATURES TASK - CATEGORY VARIABLE ]###############################      
+###############################################################################  
+def create_categorical_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):  
+    variable = rule_set['variables']['source']
+    to_variable = rule_set['variables']['destination']
+    operation = rule_set['operation']    
+    parameters = rule_set['parameters']
+    labels_str = parameters['labels_str']
+    right_inclusive = parameters['right_inclusive'] 
+    default = parameters['default']
+    null = parameters['null']
+    
+    DataFrame, to_variable, script_dict = create_categorical_variable(DataFrame, variable, to_variable, labels_str, right_inclusive, default, null, 
+                                                                      return_variable=True, return_script=True)
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+##[ CREATING FEATURES TASK - ENTITY VARIABLE ]#################################      
+###############################################################################         
+def create_entity_variable_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    variable = rule_set['variables']['source']
+    to_variable = rule_set['variables']['destination']
+    parameters = rule_set['parameters']
+    match_type = parameters['match_type']
+    dictionary = parameters['dictionary'] 
+    default = parameters['default']
+    null = parameters['null']
+    
+    DataFrame, to_variable, script_dict = create_entity_variable(DataFrame, variable=variable, to_variable=to_variable, dictionary=dictionary, match_type=match_type, default=default, null=null, 
+                                                                 return_variable=True, return_script=True)
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame       
+
+###############################################################################
+##[ CREATING FEATURES TASK - PAIR EQUALITY ]###################################      
+############################################################################### 
+def create_pair_equality_variable_task(DataFrame, rule_set, return_variable=False, return_script=False): 
+    variable1 = rule_set['variables']['source1']
+    variable2 = rule_set['variables']['source2']
+    to_variable = rule_set['variables']['destination']
+    parameters = rule_set['parameters']
+    magnitude = parameters['magnitude']
+    case = parameters['case']
+    
+    DataFrame, to_variable, script_dict = create_pair_equality_variable(DataFrame, variable1=variable1, variable2=variable2, to_variable=to_variable, magnitude=magnitude, case=case, 
+                                                                        return_variable=True, return_script=True)
+    
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame   
+
+###############################################################################
+##[ CREATING FEATURES TASK - MERGE CATEGORY ]##################################      
+###############################################################################
+def merge_categories_task(DataFrame, rule_set, return_variable=False, return_script=False):
+    variable = rule_set['variables']['source']
+    to_variable = rule_set['variables']['destination']
+    values = rule_set['parameters']['values']
+    group_value = rule_set['parameters']['group_value']
+    
+    DataFrame, to_variable, script_dict =  merge_categories(DataFrame, variable=variable, to_variable=to_variable, values=values, group_value=group_value, 
+                                                            return_variable=True, return_script=True)   
+
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame 
+
+###############################################################################
+        
 ###############################################################################
 ##[ ENCODER ]##################################################################      
 ############################################################################### 
@@ -886,9 +1547,25 @@ def load_data_task(load_data_dict, return_name=False):
     else:
         return DataFrame
 
+###############################################################################
+def create_variable_task(DataFrame, create_variable_task_dict=None, return_extra=False, return_script=False):
+    """
+    Interface function for single variable operation
+
+    Parameters
+    ----------
+    DataFrame: pandas.DataFrame
+    create_variable_task_dict : dict or JSON
+    return_extra : bool, default False
+        Returns variable_class and include if True
     
-def create_variable_task(DataFrame, create_variable_task_dict=None, return_extra=False):
-    
+    Returns
+    -------
+    DataFrame: pandas.DataFrame
+    data_name: str
+    variable_class : str, optional
+    include: bool, optional
+    """    
     import json
     if type(create_variable_task_dict)==dict:
         pass
@@ -897,80 +1574,81 @@ def create_variable_task(DataFrame, create_variable_task_dict=None, return_extra
             create_variable_task_dict = json.loads(create_variable_task_dict) 
         except:
             print('ERROR in creating variable:{}\n {}'.format(create_variable_task_dict, traceback.format_exc()))  
-    
+            
+    rule_set = {
+        'operation':create_variable_task_dict['operation'],
+        'variables':create_variable_task_dict['variables'],
+        'parameters':create_variable_task_dict['parameters']
+    }
+    out_type = create_variable_task_dict['out_type']
+    include = create_variable_task_dict['include']    
+
     if create_variable_task_dict['type']=='target':
-        target = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Apply operations on variables
-        DataFrame, output_variables = create_target_variable(DataFrame, target, return_variable=True)        
-    elif create_variable_task_dict['type']=='transform':
-        operations = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Apply operations on variables
-        DataFrame, output_variables = create_transformed_variables(DataFrame, operations, return_variables=True)
-    elif create_variable_task_dict['type']=='conditions':
-        conditions = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Apply operations on variables
-        DataFrame, output_variables = create_binary_variables(DataFrame, conditions, return_variables=True) 
-    elif create_variable_task_dict['type']=='buckets':
-        buckets = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Create more Catergorical variables
-        DataFrame, output_variables = create_categorical_variables(DataFrame, buckets, return_variables=True)
-    elif create_variable_task_dict['type']=='category_merges':
-        category_merges = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Merge categorical values
-        DataFrame, output_variables = merge_categories(DataFrame, category_merges, return_variables=True)
+        DataFrame, output_variable, script_dict  = create_target_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)      
+    if create_variable_task_dict['type']=='transform':
+        DataFrame, output_variable, script_dict  = create_transformed_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)  
+    elif create_variable_task_dict['type']=='str_transform':
+        DataFrame, output_variable, script_dict  = create_str_transformed_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)          
+    elif create_variable_task_dict['type']=='operation_mult':
+        DataFrame, output_variable, script_dict  = create_operation_mult_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)           
+    elif create_variable_task_dict['type']=='seq_order':
+        DataFrame, output_variable, script_dict  = create_sequence_order_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)
+    elif create_variable_task_dict['type']=='comparison':
+        DataFrame, output_variable, script_dict  = create_comparison_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)     
+    elif create_variable_task_dict['type']=='str_comparison':
+        DataFrame, output_variable, script_dict  = create_str_comparison_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)    
+    elif create_variable_task_dict['type']=='condition':
+        DataFrame, output_variable, script_dict  = create_binary_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)     
+    elif create_variable_task_dict['type']=='category':
+        DataFrame, output_variable, script_dict  = create_categorical_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)    
+    elif create_variable_task_dict['type']=='entity':
+        DataFrame, output_variable, script_dict  = create_entity_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)    
     elif create_variable_task_dict['type']=='pair_equality':
-        variable_pairs = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Merge categorical values
-        DataFrame, output_variables = create_variable_pair_equality(DataFrame, variable_pairs, return_variables=True)
-    elif create_variable_task_dict['type']=='string_similarity':
-        string_similarity = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Merge categorical values
-        DataFrame, output_variables = create_string_similarity_variables(DataFrame, string_similarity, return_variables=True)
-    elif create_variable_task_dict['type']=='string_counts':
-        string_counts = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Merge categorical values
-        DataFrame, output_variables = create_string_count_variables(DataFrame, string_counts, return_variables=True)
-    elif create_variable_task_dict['type']=='date_differences':
-        date_differences = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Merge categorical values
-        DataFrame, output_variables = create_date_difference_variables(DataFrame, date_differences, return_variables=True)
-    elif create_variable_task_dict['type']=='numeric_differences':
-        numeric_differences = create_variable_task_dict['rule_set']
-        variable_class = create_variable_task_dict['variable_class']
-        include = create_variable_task_dict['include']
-        # Merge categorical values
-        DataFrame, output_variables = create_numeric_difference_variables(DataFrame, numeric_differences, return_variables=True)        
+        DataFrame, output_variable, script_dict  = create_pair_equality_variable_task(DataFrame, rule_set, return_variable=True, return_script=True)   
+    elif create_variable_task_dict['type']=='category_merge':
+        DataFrame, output_variable, script_dict  = merge_categories_task(DataFrame, rule_set, return_variable=True, return_script=True)   
     else:
-        output_variables= None    
-        variable_class = None
+        output_variable= None    
+        out_type = None
         include = False
+        script_dict= {
+                "type": "",
+                "out_type":"",
+                "include": False,
+                "operation": "",
+                "variables": {
+                    "source": "",
+                    "destination": None
+                },
+                "parameters": {                
+                }
+        }
     
+    if return_script and return_extra:
+        return DataFrame, output_variable, out_type, include, script_dict
+    if return_script:
+        return DataFrame, script_dict
     if return_extra:    
-        return DataFrame, output_variables, variable_class, include   
+        return DataFrame, output_variable, out_type, include   
     else:
-        return DataFrame, output_variables
+        return DataFrame, output_variable
 
-
-
-def setup_variables_task(DataFrame, variables_setup_dict):
+def setup_variables_task(DataFrame, variables_setup_dict, return_script=False):
+    """
+    Parameters
+    ----------
+    DataFrame: pandas.DataFrame
+    variables_setup_dict: json or dict
+   
+    
+    Returns
+    -------
+    DataFrame: pandas.DataFrame
+    category_variables: list(str)
+    binary_variables: list(str)
+    target_variable: list(str)
+    """
+    
     import re
     import json
     if type(variables_setup_dict)==dict:
@@ -992,28 +1670,152 @@ def setup_variables_task(DataFrame, variables_setup_dict):
     #Create variables sets
     category_variables =  set(category_variables) & set(DataFrame.columns)
     binary_variables  = set(binary_variables) & set(DataFrame.columns)
-
+    
+    # Create placeholder for variable creation scripts
+    script_dict = []
+    
     # Check if target variable exists (fill the column with None in scoring)
     if not target_variable in DataFrame.columns:
         DataFrame[target_variable]=None    
     
     # Run variable creation task list
-    for task_type in variables_setup_dict.keys():
-        task_type = re.sub('[\W\d]', '', task_type)         
-        if task_type in ['target', 'transforms', 'conditions', 
-                 'buckets', 'category_merges', 'pair_equality', 'string_entity', 
-                 'string_similarity', 'string_counts']:
+    for preprocess_task in variables_setup_dict['preprocess_tasks']:
+        task_type = preprocess_task['type'] #re.sub('[\W\d]', '', task_type)         
+        if task_type in ['target', 'transform', 'condition', 'category', 'entity', 'category_merge', 'pair_equality', 'str_transform', 
+                 'str_comparison', 'operation_mult', 'comparison', 'seq_order']:
             #print(task_type)
-            DataFrame, variable_, variable_class_, include_ = create_variable_task(DataFrame, create_variable_task_dict= variables_setup_dict[task_type], return_extra=True)        
-
-            if variable_class_=='bin' and include_:
-                binary_variables.update(variable_)
-            elif variable_class_=='cat' and include_:
-                category_variables.update(variable_)
+            
+            DataFrame, variable_, variable_class_, include_, script_dict_ = create_variable_task(DataFrame, create_variable_task_dict=preprocess_task, return_extra=True, return_script=True)                    
+   
+            if include_:
+                script_dict_['include'] = True
+                script_dict.append(script_dict_)
+                if variable_class_=='bin':
+                    binary_variables.add(variable_)
+                elif variable_class_=='cat':
+                    category_variables.add(variable_)
 
     #Finalize variables lists
     category_variables=list(category_variables)
     binary_variables=list(binary_variables)
     target_variable = target_variable
     
-    return DataFrame, category_variables, binary_variables, target_variable
+    if return_script:
+        return DataFrame, category_variables, binary_variables, target_variable, script_dict
+    else:
+        return DataFrame, category_variables, binary_variables, target_variable
+
+
+###############################################################################
+# Generate Script
+###############################################################################
+def generate_variables_script(source, destination):    
+    if type(source)==list:
+        if len(source)==2:
+            variables = {
+                'source1': source[0],
+                'source2': source[1],
+                'destination': destination
+            }            
+        elif len(source)==4:
+            variables = {
+                'source1a': source[0],
+                'source2a': source[1],
+                'source1b': source[2],
+                'source2b': source[3],
+                'destination': destination
+            }
+    else:
+        variables = {
+            'source': source,
+            'destination': destination
+        }
+    return variables
+    
+def generate_create_variable_task_script(type='', out_type='', include=False, operation='', source=None, destination=None, parameters={}):
+    variable_task_script = {
+        'type': type,
+        'out_type':out_type,
+        'include': include,
+        'operation': operation,
+        'variables': generate_variables_script(source, destination),
+        'parameters': parameters
+    }
+    return variable_task_script
+
+###############################################################################
+# EZ User Functions
+###############################################################################
+def create_category_ez(DataFrame, variable, labels_str, default='OTHER', null='NA', to_variable=None, target_variable=None, show_plot=True):
+    rule_set = {   
+        'operation':'bucket',
+        'variables': {
+            'source':variable, 
+            'destination':to_variable
+        },
+        'parameters': {
+            'labels_str': labels_str,
+            'right_inclusive':True,
+            'default':default,
+            'null':null
+        }
+    }
+    DataFrame, category_variable = mltk.create_categorical_variable_task(DataFrame, rule_set, return_variable=True)
+    print(variable_response(DataFrame=DataFrame, variable=category_variable, target_variable=target_variable, show_plot=show_plot))
+    return DataFrame, category_variable
+
+def create_binary_ez(DataFrame, condition_str, default=0, null=0, to_variable=None, target_variable=None, show_plot=True):
+    rule_set = {
+        'operation':'condition',  
+        'variables': {
+            'source': None, 
+            'destination':to_variable
+        },
+        'parameters': {
+            'condition_str':condition_str,
+            'default':default,
+            'null':null,
+        }
+    } 
+    
+    DataFrame, binary_variable = create_binary_variable_task(DataFrame, rule_set, return_variables=True)    
+    print(variable_response(DataFrame=DataFrame, variable=binary_variable, target_variable=target_variable, show_plot=show_plot))
+    return DataFrame, binary_variable  
+
+def create_entity_ez(DataFrame, variable, dictionary, default='OTHER', null='NA', to_variable=None, target_variable=None, show_plot=True):
+    rule_set = {
+        'operation':'dictionary',  
+        'variables': {
+            'source': variable, 
+            'destination':to_variable
+        },
+        'parameters': {
+            'match_type': None,
+            'dictionary':dictionary,
+            'default':default,
+            'null':null,
+        }
+    } 
+    
+    DataFrame, entity_variable = create_entity_variable_task(DataFrame, rule_set, return_variables=True)    
+    print(variable_response(DataFrame=DataFrame, variable=entity_variable, target_variable=target_variable, show_plot=show_plot))
+    return DataFrame, entity_variable  
+
+def create_entity_ez(DataFrame, variable, dictionary, default='OTHER', null='NA', to_variable=None, target_variable=None, show_plot=True):
+    rule_set = {
+        'operation':'dictionary',  
+        'variables': {
+            'source': variable, 
+            'destination':to_variable
+        },
+        'parameters': {
+            'match_type': None,
+            'dictionary':dictionary,
+            'default':default,
+            'null':null,
+        }
+    } 
+    
+    DataFrame, entity_variable = create_entity_variable_task(DataFrame, rule_set, return_variables=True)    
+    print(variable_response(DataFrame=DataFrame, variable=entity_variable, target_variable=target_variable, show_plot=show_plot))
+    return DataFrame, entity_variable  

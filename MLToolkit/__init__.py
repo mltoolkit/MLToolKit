@@ -4,12 +4,12 @@
 __docformat__ = 'restructuredtext'
 __name__="mltk"
 __distname__="pymltoolkit"
-__version__="0.1.5"
-__description__= 'Machine Learning Toolkit (MLToolkit/mltk) for Python'
+__version__="0.1.6"
+__description__= 'End-to-end Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
-__url__="https://github.com/sptennak/MLToolkit"
+__url__="https://mltoolkit.github.io/mltk/"
 __create_date__="Sun Jul 01 2018"
-__last_update__="Sun Jul 28 2019"
+__last_update__="Mon Aug 12 2019"
 __license__="""
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
@@ -28,9 +28,11 @@ Main Features
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
 - Model performance analysis and comparison between models
-- Hyper parameter tuning
+- Cross Validation and Hyper parameter tuning
+- JSON input script for executing model building and scoring tasks.
+- Model Building UI
 - Auto ML (automated machine learning)
-- Serving models via RESTful  API
+- Model Deploymet and Serving via RESTful  API
 
 Author
 ------
@@ -39,14 +41,14 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/sptennak/MLToolkit
+Github: https://github.com/mltoolkit/mltk
 
 License
 -------
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
 
-hard_dependencies = ('numpy', 'scipy', 'matplotlib', 'pandas','sklearn', 'statsmodels','re') #'tensorflow'
+hard_dependencies = ('numpy', 'scipy', 'matplotlib', 'pandas','sklearn', 'statsmodels','re', 'tensorflow', 'catboost') #'tensorflow'
 missing_dependencies = []
 
 for dependency in hard_dependencies:
@@ -80,7 +82,7 @@ from mltk.explore import *
 from mltk.model import *
 from mltk.matrics import *
 from mltk.deploy import *
-#from mltk.project import *
+from mltk.project import *
 
 print('mltk=={}'.format(__version__.strip()))
 ###############################################################################

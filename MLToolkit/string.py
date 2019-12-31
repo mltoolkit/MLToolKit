@@ -16,9 +16,12 @@ Main Features
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
 - Model performance analysis and comparison between models
-- Hyper parameter tuning
+- Cross Validation and Hyper parameter tuning
+- JSON input script for executing model building and scoring tasks.
+- Model Building UI
 - Auto ML (automated machine learning)
-- Serving models via RESTful  API
+- Model Deploymet and Serving via RESTful  API
+
 
 Author
 ------
@@ -27,7 +30,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/sptennak/MLToolkit
+Github: https://github.com/mltoolkit/mltk
 
 License
 -------

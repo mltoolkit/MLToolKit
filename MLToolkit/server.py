@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Mar 14 2019
-@Last update: Sun July 01 2019
+@Last update: Sun August 01 2019
 @author: Sumudu Tennakoon
 @licence:
    Copyright 2019 Sumudu Tennakoon
@@ -416,9 +416,12 @@ def input_form():
 
 ###############################################################################   
 def init():
+    global MLModelObjects
     global MLModelObject
+    MLModelObjects = {}
     # LOAD PRE-TRAINED MODEL
-    MLModelObject = mltk.load_model(ModelFile)
+    MLModelObjects[0] = mltk.load_model(ModelFile)
+    MLModelObject = MLModelObjects[0] 
     model_test_run(model_input_data_json, model_input_data_file)
        
 ###############################################################################

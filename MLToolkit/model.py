@@ -18,9 +18,12 @@ Main Features
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
 - Model performance analysis and comparison between models
-- Hyper parameter tuning
+- Cross Validation and Hyper parameter tuning
+- JSON input script for executing model building and scoring tasks.
+- Model Building UI
 - Auto ML (automated machine learning)
-- Serving models via RESTful  API
+- Model Deploymet and Serving via RESTful  API
+
 
 Author
 ------
@@ -29,7 +32,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/sptennak/MLToolkit
+Github: https://github.com/mltoolkit/mltk
 
 License
 -------
@@ -50,8 +53,10 @@ import re
 import warnings
 warnings.filterwarnings("ignore")
 
+from mltk.explore import *
 from mltk.matrics import *
 from mltk.deploy import *
+from mltk.etl import *
 
 def train_validate_test_split(DataFrame, ratios=(0.6,0.2,0.2)):
     N = len(DataFrame.index)
@@ -119,6 +124,15 @@ class MLModel():
 		
     def get_score_label(self):
         return self.score_parameters['ScoreLabel']
+
+    def get_score_edges(self):
+        return self.score_parameters['Edges']
+    
+    def get_predicted_label(self):
+        return self.score_parameters['PredictedLabel']
+
+    def get_predict_threshold(self):
+        return self.score_parameters['Threshold']
         
     def get_robustness_table(self):
         return self.model_evaluation['RobustnessTable']
@@ -137,15 +151,22 @@ class MLModel():
     
     def set_score_edges(self, edges):
         self.score_parameters['Edges']=edges
- 
+
+    def set_predict_threshold(self, threshold):
+        self.score_parameters['Threshold'] = threshold
+    
+    def get_model_data_stats(self):
+        return self.sample_attributes['ModelDataStats']
+    
     def get_model_manifest(self, save=False, save_path=''):       
         import json
         model_manifest= {'model_attributes':self.model_attributes,
                         'model_parameters':self.model_parameters,
+                        'score_parameters':self.score_parameters,
                         'sample_attributes':self.sample_attributes,  
                         'roc_auc':self.get_auc(curve='roc'),
                         'prc_auc':self.get_auc(curve='prc'),
-                        'robustness_table':self.get_robustness_table().to_dict(orient='dict'),
+                        'robustness_table':self.get_robustness_table().to_dict(orient='dict')
                         }        
         if save==True:
             json_object = json.dumps(model_manifest)          
@@ -561,15 +582,17 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
 
     # ScoreParameters
     edges = score_parameters['Edges']
+    threshold=score_parameters['Threshold']
     quantiles = score_parameters['Quantiles']
     quantile_label = score_parameters['QuantileLabel']
     score_variable=score_parameters['ScoreVariable']
     score_label=score_parameters['ScoreLabel']
+    predicted_label=score_parameters['PredictedLabel']
     
     ###############################################################################
     print(model_attributes)
     print(model_parameters)
-    print(sample_attributes)
+    print(sample_attributes['SampleDescription'])
     print(score_parameters)
     ###############################################################################
     
@@ -655,44 +678,6 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     #return copy.deepcopy(Model)
     return Model
 
-def build_ml_model_task(DataFrame, model_setup_dict, variables_setup_dict=None):
-    
-    import json
-    import pandas as pd
-    
-    if type(model_setup_dict)==dict:
-        pass
-    else:
-        try:
-            model_setup_dict = json.loads(model_setup_dict) 
-        except:
-            print('ERROR in fitting model:{}\n {}'.format(model_setup_dict, traceback.format_exc()))  
-    
-    if type(DataFrame)==dict:
-        dict_keys = DataFrame.keys()
-        if ('TrainDataset' in dict_keys) and ('ValidateDataset' in dict_keys) and ('TestDataset' in dict_keys):
-            TrainDataset = DataFrame['TrainDataset']
-            ValidateDataset = DataFrame['ValidateDataset']
-            TestDataset = DataFrame['TestDataset']
-        else:
-            print('Data input error check if the input dictionary has keys: "TrainDataset",  "ValidateDataset", "TestDataset" ')
-    else:    
-        TrainDataset, ValidateDataset, TestDataset = train_validate_test_split(DataFrame, ratios=model_setup_dict['sample_split'])
-    
-    Model = build_ml_model(TrainDataset, ValidateDataset, TestDataset, 
-                                  model_variables=model_setup_dict['model_variables'],
-                                  variable_setup = variables_setup_dict,
-                                  target_variable=model_setup_dict['target_variable'],
-                                  model_attributes=model_setup_dict['model_attributes'], 
-                                  sample_attributes=model_setup_dict['sample_attributes'], 
-                                  model_parameters=model_setup_dict['model_parameters'], 
-                                  score_parameters=model_setup_dict['score_parameters'], 
-                                  return_model_object=model_setup_dict['model_outputs']['return_model_object'], 
-                                  show_results=model_setup_dict['model_outputs']['show_results'], 
-                                  show_plot=model_setup_dict['model_outputs']['show_plot']
-                                  )
-    return Model
-
 def model_guages_to_row(Model):
     guages = [{'Model':Model.get_model_id(),
                 'ROC_AUC':Model.get_auc(curve='roc'),
@@ -758,3 +743,130 @@ def confusion_matrix_comparison(DataFrame, Models, thresholds=0.5, score_variabl
         ConfusionMatrixComparison[['PPV', 'TPR', 'ACC', 'F1']].plot(kind='bar', subplots=True, figsize=(5,10), legend=False)
     
     return ConfusionMatrixComparison
+
+###############################################################################
+##[ JSON INTERFACE ]###########################################################
+###############################################################################
+    
+def build_ml_model_task(DataFrame, model_setup_dict, variables_setup_dict, return_script=False):
+    """
+    Parameters
+    ----------
+    DataFrame: pandas.DataFrame
+    model_setup_dict: json or dict
+    variables_setup_dict: json or dict
+    
+    Returns
+    -------
+    Model: mltk.MLModel
+        
+    """    
+    import json
+    import pandas as pd
+    
+    if type(model_setup_dict)==dict:
+        pass
+    else:
+        try:
+            model_setup_dict = json.loads(model_setup_dict) 
+        except:
+            print('ERROR in fitting model:{}\n {}'.format(model_setup_dict, traceback.format_exc()))  
+
+    if type(variables_setup_dict)==dict:
+        pass
+    else:
+        try:
+            variables_setup_dict = json.loads(variables_setup_dict) 
+        except:
+            print('ERROR in fitting model:{}\n {}'.format(variables_setup_dict, traceback.format_exc()))  
+    
+    if type(DataFrame)==dict:
+        dict_keys = DataFrame.keys()
+        if ('TrainDataset' in dict_keys) and ('ValidateDataset' in dict_keys) and ('TestDataset' in dict_keys):
+            TrainDataset = DataFrame['TrainDataset']
+            ValidateDataset = DataFrame['ValidateDataset']
+            TestDataset = DataFrame['TestDataset']
+        else:
+            print('Data input error check if the input dictionary has keys: "TrainDataset",  "ValidateDataset", "TestDataset" ')
+    else:    
+        TrainDataset, ValidateDataset, TestDataset = train_validate_test_split(DataFrame, ratios=model_setup_dict['sample_split'])
+    
+    model_data_stats = data_description(TrainDataset)
+    model_setup_dict['sample_attributes']['ModelDataStats'] = model_data_stats
+    
+    TrainDataset, category_variables, binary_variables, target_variable, preprocess_variables_script = setup_variables_task(TrainDataset, variables_setup_dict, return_script=True)
+    TrainDataset, feature_variables, target_variable = to_one_hot_encode(TrainDataset, 
+                                                                         category_variables=category_variables, 
+                                                                         binary_variables=binary_variables, 
+                                                                         target_variable=target_variable)
+    
+    ValidateDataset, category_variables_, binary_variables_, target_variable_ = setup_variables_task(ValidateDataset, variables_setup_dict)
+    ValidateDataset, feature_variables, target_variable = to_one_hot_encode(ValidateDataset, 
+                                                                         category_variables=category_variables, 
+                                                                         binary_variables=binary_variables, 
+                                                                         target_variable=target_variable)
+    
+    TestDataset, category_variables_, binary_variables_, target_variable_  = setup_variables_task(TestDataset, variables_setup_dict)
+    TestDataset, feature_variables, target_variable = to_one_hot_encode(TestDataset, 
+                                                                         category_variables=category_variables, 
+                                                                         binary_variables=binary_variables, 
+                                                                         target_variable=target_variable)
+        
+    Model = build_ml_model(TrainDataset, ValidateDataset, TestDataset, 
+                                  model_variables=model_setup_dict['model_variables'],
+                                  variable_setup = variables_setup_dict,
+                                  target_variable=model_setup_dict['target_variable'],
+                                  model_attributes=model_setup_dict['model_attributes'], 
+                                  sample_attributes=model_setup_dict['sample_attributes'], 
+                                  model_parameters=model_setup_dict['model_parameters'], 
+                                  score_parameters=model_setup_dict['score_parameters'], 
+                                  return_model_object=model_setup_dict['model_outputs']['return_model_object'], 
+                                  show_results=model_setup_dict['model_outputs']['show_results'], 
+                                  show_plot=model_setup_dict['model_outputs']['show_plot']
+                                  )
+    
+
+    if return_script:
+        variables_setup_dict = {
+            "setting":"score",    
+            "variables": variables_setup_dict["variables"],    
+            "preprocess_tasks": preprocess_variables_script    
+        }
+        return Model, variables_setup_dict
+    else:
+        return Model
+
+def build_ml_model_from_data_task(DataFrame, model_building_setup_dict, return_script=False):
+    """
+    Parameters
+    ----------
+    DataFrame: pandas.DataFrame
+    model_building_setup_dict: json or dict
+    
+    Returns
+    -------
+    Model: mltk.MLModel
+    """   
+    
+    import json
+    
+    if type(model_building_setup_dict)==dict:
+        pass
+    else:
+        try:
+            model_building_setup_dict = json.loads(model_building_setup_dict) 
+        except:
+            print('ERROR in fitting model:{}\n {}'.format(model_building_setup_dict, traceback.format_exc())) 
+            
+    model_setup_dict = model_building_setup_dict['model_setup_dict']
+    variables_setup_dict = model_building_setup_dict['variables_setup_dict']
+    
+    Model, variables_setup_dict = build_ml_model_task(DataFrame, model_setup_dict=model_setup_dict, variables_setup_dict=variables_setup_dict, return_script=True)
+    print(Model.model_attributes['ModelID'])
+    print('ROC AUC: ', Model.get_auc(curve='roc'))
+    print('PRC AUC: ', Model.get_auc(curve='prc'))
+    
+    if return_script:
+        return Model, variables_setup_dict
+    else:
+        return Model

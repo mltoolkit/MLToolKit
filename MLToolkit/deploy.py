@@ -16,9 +16,12 @@ Main Features
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
 - Model performance analysis and comparison between models
-- Hyper parameter tuning
+- Cross Validation and Hyper parameter tuning
+- JSON input script for executing model building and scoring tasks.
+- Model Building UI
 - Auto ML (automated machine learning)
-- Serving models via RESTful  API
+- Model Deploymet and Serving via RESTful  API
+
 
 Author
 ------
@@ -27,7 +30,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/sptennak/MLToolkit
+Github: https://github.com/mltoolkit/mltk
 
 License
 -------
@@ -56,7 +59,7 @@ def score(DataFrame, score_variable='Probability', edges=[0, 0.1, 0.2, 0.3, 0.4,
     DataFrame[score_label]=pd.cut(DataFrame[score_variable], bins=edges, labels=score, include_lowest=True, right=True).astype('int8')          
     return DataFrame
 
-def set_predicted_columns(DataFrame, score_variable, threshold=0.5, fill_missing=0):
+def set_predicted_columns(DataFrame, score_variable, threshold=0.5, predicted_label='Predicted', fill_missing=0):
     """
     Parameters
     ----------
@@ -72,11 +75,11 @@ def set_predicted_columns(DataFrame, score_variable, threshold=0.5, fill_missing
     DataFrame : pandas.DataFrame
     """
     str_condition = '{}>{}'.format(score_variable, threshold)
-    DataFrame['Predicted'] = DataFrame.eval(str_condition).astype('int8').fillna(fill_missing)    
+    DataFrame[predicted_label] = DataFrame.eval(str_condition).astype('int8').fillna(fill_missing)    
     #np.where(TestDataset[score_variable]>threshold,1,0)
     return DataFrame
           
-def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, fill_missing=0, verbose=False):    
+def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, threshold=None, predicted_label='Predicted', fill_missing=0, verbose=False):    
     target_variable = Model.get_target_variable()
     model_variables = Model.get_model_variables()
     score_variable = Model.get_score_variable()   
@@ -84,6 +87,9 @@ def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, fill
     if edges==None:
         edges=Model.get_score_parameter('Edges')
     
+    if threshold==None:
+        threshold =Model.get_score_parameter('Threshold')
+        
     if score_label==None:
         score_label=Model.get_score_parameter('ScoreLabel')
         
@@ -111,10 +117,11 @@ def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, fill
         
     DataFrame[score_variable] = y_pred_prob
     DataFrame=score(DataFrame, score_variable=score_variable, edges=edges, score_label=score_label)
+    DataFrame = set_predicted_columns(DataFrame, score_variable=score_variable, threshold=threshold, predicted_label=predicted_label, fill_missing=0)
     
     return DataFrame
 	
-def score_records(record, Model, edges=None, ETL=None, return_type='frame', json_orient='records'):
+def score_records(record, Model, edges=None, threshold=None, ETL=None, variables_setup_dict=None, return_type='frame', json_orient='records'):
     """
     Parameters
     ----------
@@ -128,10 +135,11 @@ def score_records(record, Model, edges=None, ETL=None, return_type='frame', json
     ETL: function, defualt None
         Input data pre processing function. Will not continue scoring if not provided. 
         Function has to be created in the form below, returning a pandas.DataFrame as output.
-        def ETL(InputDataFrame):
+        def ETL(InputDataFrame, variables_setup_dict):
             ...
             ...
             return OutputDataFrame
+    variables_setup_dict: dict or json
     return_type : {'frame', 'json, 'dict'}, default 'frame'
         'frame' -> pandas.DataFrame
         'json -> JSON str
@@ -164,10 +172,12 @@ def score_records(record, Model, edges=None, ETL=None, return_type='frame', json
     
     score_label = Model.get_score_label()
     score_variable = Model.get_score_variable()
+    predicted_label = Model.get_predicted_label()
+
     #input_columns = list(ScoreDataset.columns.values) #will not work if column names were cleaned
-    result_columns = [score_variable,score_label]
+    result_columns = [score_variable, score_label, predicted_label]
     if callable(ETL):
-        ScoreDataset, input_columns = ETL(ScoreDataset)
+        ScoreDataset, input_columns = ETL(ScoreDataset, variables_setup_dict)
     elif type(ETL)==str:
         try:
             ScoreDataset, input_columns, category_variables, binary_variables, target_variable = setup_variables_json_config(ScoreDataset, ETL)
@@ -175,7 +185,7 @@ def score_records(record, Model, edges=None, ETL=None, return_type='frame', json
         except:
             print('Error in JSON variable setup configuration: \n{}\n'.format(traceback.format_exc()))
             return None
-    ScoreDataset = score_processed_dataset(ScoreDataset, Model, edges=edges, score_label=None, fill_missing=0)
+    ScoreDataset = score_processed_dataset(ScoreDataset, Model, edges=edges, score_label=None, threshold=threshold, predicted_label=predicted_label, fill_missing=0)
     
     if return_type=='json':
         return ScoreDataset[input_columns+result_columns].to_json(orient=json_orient)

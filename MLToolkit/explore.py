@@ -16,9 +16,11 @@ Main Features
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
 - Model performance analysis and comparison between models
-- Hyper parameter tuning
+- Cross Validation and Hyper parameter tuning
+- JSON input script for executing model building and scoring tasks.
+- Model Building UI
 - Auto ML (automated machine learning)
-- Serving models via RESTful  API
+- Model Deploymet and Serving via RESTful  API
 
 Author
 ------
@@ -27,7 +29,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/sptennak/MLToolkit
+Github: https://github.com/mltoolkit/mltk
 
 License
 -------
@@ -54,15 +56,25 @@ def data_description(DataFrame, include='all'):
     DataStats=DataStats.merge(DataTypes, left_index=True, right_index=True, how='left')
     return DataStats
 	
-def histogram(DataFrame, column, n_bins=10, bin_range=None, orientation='vertical', show_plot=False):    
-    if show_plot:
-        plt.figure()
-        counts, edge_labels, bars = plt.hist(DataFrame[column], bins=n_bins, range=bin_range, orientation=orientation, density=False)
-        plt.xlabel(column)
-        plt.ylabel('Count')
-        plt.grid(True)
-    else:
-        counts, edge_labels = np.histogram(DataFrame[column], bins=n_bins, range=bin_range, density=False)
+def histogram(DataFrame, variable, n_bins=10, bin_range=None, orientation='vertical', density=False, show_plot=False):    
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    variable : str
+        Variable to calculate histogram.    
+    n_bins : int, or list(numeric)
+        Number of bins or list of bin edges.
+    bin_range : 
+    orientation : {'json', 'dict'}, default 'json'
+    
+    Returns
+    -------
+    out : JSON str or dict
+    
+    """
+    counts, edge_labels = np.histogram(DataFrame[variable], bins=n_bins, range=bin_range, density=False)
     
     try:
         n = len(n_bins)-1
@@ -74,13 +86,33 @@ def histogram(DataFrame, column, n_bins=10, bin_range=None, orientation='vertica
         l_bracket = '['
         r_bracket = ']'
         bin_labels.append('{}_{}{:g},{:g}{}'.format(i+1, l_bracket, edge_labels[i], edge_labels[i+1], r_bracket))
-        
-    Table = pd.DataFrame(data={'counts':counts}, dtype='int', index=bin_labels)
-    Table.index.name = column
     
+    Table = pd.DataFrame(data={'counts':counts}, dtype='int', index=bin_labels)
+    Table.index.name = variable
+    
+    if density:
+        density_, edge_labels_ = np.histogram(DataFrame[variable], bins=n_bins, range=bin_range, density=True)
+        Table['density'] = density_
+        
     TotalRow = pd.DataFrame(data=[Table['counts'].sum()], columns=['counts'], index=np.array(['TOTAL']))
     TotalRow.index.name = Table.index.name
     Table = Table.append(TotalRow, ignore_index=False)
+    
+    if show_plot:
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+        DataFrame[variable].plot(ax=ax1, kind='hist', alpha=0.7, edgecolor='black', range=bin_range, bins=n_bins, grid=True)
+        ax_limt = ax1.axis()
+        if density and orientation=='vertical':
+            DataFrame[variable].plot(ax=ax2, kind='kde', style='r-')
+        else:
+            print('KDE not supported with horizontal option')
+        ax1.set_xlabel(variable)
+
+        ax1.set_xlim((ax_limt[0], ax_limt[1]))
+        ax2.set_xlim((ax_limt[0], ax_limt[1]))
+        
+        plt.show()
     
     return Table
 
@@ -213,7 +245,7 @@ def variable_response(DataFrame, variable, target_variable, measurement_variable
                 ResponseTable[y].sum(),
                 ResponseTable['CountsFraction%'].sum(),
                 ResponseTable['ResponseFraction%'].sum(),
-                ResponseTable[y].sum()/ResponseTable[y0].sum()]
+                ResponseTable[y].sum()/ResponseTable[y0].sum() * 100]
     TotalRow = pd.DataFrame(data=[total_row], columns=ResponseTable.columns, index=np.array(['TOTAL']))
     TotalRow.index.name = ResponseTable.index.name
     ResponseTable = ResponseTable.append(TotalRow, ignore_index=False)
@@ -375,7 +407,13 @@ def correlation_matrix(DataFrame, variables, target_variable=None, method='pears
     correlation = DataFrame[variables].corr()
     
     if show_plot:
-        plt.matshow(correlation)
+        f = plt.figure(figsize=(8, 6))
+        plt.matshow(correlation, fignum=f.number)
+        #plt.xticks(range(DataFrame.shape[1]), DataFrame.columns, fontsize=12, rotation=90)
+        #plt.yticks(range(DataFrame.shape[1]), DataFrame.columns, fontsize=12)        
+        cb = plt.colorbar()
+        #cb.ax.tick_params(labelsize=14)
+        plt.title('Correlation Matrix', fontsize=16)
         plt.show()
         
     if return_type=='list':

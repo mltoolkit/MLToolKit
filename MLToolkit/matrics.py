@@ -16,9 +16,12 @@ Main Features
 - Exploratory data analysis (statistical summary, univariate analysis, etc.)
 - Feature Extraction and Engineering
 - Model performance analysis and comparison between models
-- Hyper parameter tuning
+- Cross Validation and Hyper parameter tuning
+- JSON input script for executing model building and scoring tasks.
+- Model Building UI
 - Auto ML (automated machine learning)
-- Serving models via RESTful  API
+- Model Deploymet and Serving via RESTful  API
+
 
 Author
 ------
@@ -27,7 +30,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/sptennak/MLToolkit
+Github: https://github.com/mltoolkit/mltk
 
 License
 -------
@@ -69,7 +72,7 @@ def plot_model_results(ResultsTable, x_column, y_column, size_column, color_colu
     
 ###############################################################################
 # ROBUSTNESS TABLE                 
-def robustness_table(ResultsSet, target_variable='Response', score_variable='Probability',  score_label='Score', show_plot=False):  
+def robustness_table(ResultsSet, target_variable='Response', score_variable='Probability',  score_label='Score', condensed=False, show_plot=False):  
 
     if target_variable not in ResultsSet.columns:
         ResultsSet[target_variable]=None
@@ -110,8 +113,35 @@ def robustness_table(ResultsSet, target_variable='Response', score_variable='Pro
            
     RobustnessTable[['BucketCount','ResponseCount']] = RobustnessTable[['BucketCount','ResponseCount']].astype('int')
     
+    if condensed:
+        RobustnessTable = RobustnessTable[['meanProbability', 'BucketPrecision', 'BucketCount', 'ResponseCount', 'CumulativeBucketFraction',  'CumulativeResponseFraction', 'CumulativePrecision']]
+    
     return RobustnessTable
+###############################################################################
+def get_score_cutoffs(ResultsSet, quantiles=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], target_variable='Response', score_variable='Probability'):
 
+    responses = len(ResultsSet.loc[ResultsSet[target_variable]==1].index)
+    total = len(ResultsSet[target_variable].index)
+    response_rate = responses/total
+    
+    ResultsSet['rank'] = ResultsSet[score_variable].rank(method='first')  
+    out = pd.qcut(x=ResultsSet['rank'], q=quantiles) #, labels=False)
+    ResultsSet['quantile']=out
+    edges = ResultsSet.groupby(by=['quantile'])[score_variable].min().values.round(4)
+    edges = sorted(edges)
+    edges = list(edges)
+    edges.append(1.0000)
+    edges[0] = 0.0  
+    
+    out = pd.qcut(x=ResultsSet['rank'], q=[0.0, 1.0-response_rate, 1.0]) # cutoff to take the top most fraction matching response rate.
+    ResultsSet['quantile']=out
+    thresholds = ResultsSet.groupby(by=['quantile'])[score_variable].min().values.round(4)
+    thresholds = sorted(thresholds)
+    thresholds = list(thresholds)
+    threshold = thresholds[1]
+
+    return edges, threshold
+    
 ###############################################################################
 # COMPUTE MODEL PERFORMANCE EVALUATION MATRICS                  
 def model_performance_matrics(ResultsSet, target_variable='Actual', score_variable='Probability', quantile_label='Quantile',  quantiles=1000, show_plot=False):
