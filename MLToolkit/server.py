@@ -324,7 +324,8 @@ def score_routine(model_input_data, model_key=None, ETL=None, return_type='frame
         
     # Execute post-processing (save to file, upload to DB server, etc)
     file_reference = str(uuid.uuid4())
-    output = PostProcess(scored_data, score_result_columns, file_reference, dropbox_folder, temp_folder, model_results_index) # Should return a dataframe
+    post_process_parameters = {'model_results_index':model_results_index}
+    output = PostProcess(scored_data, score_result_columns, file_reference, dropbox_folder, temp_folder, post_process_parameters) # Should return a dataframe
         
     if return_type=='dict':
         output = output.to_dict(orient='records') # return dict
@@ -595,7 +596,7 @@ def init():
         spec1.loader.exec_module(etl_module)
         ETL = etl_module.ETL
     except:
-        ETL = lambda DataFrame : DataFrame
+        ETL = lambda DataFrame, variables_setup_dict, etl_parameters : DataFrame
         print('ERROR: \n{}'.format(traceback.format_exc()))
         print('No ETL tasks executed...\nInput datset will be not modified...')
     ###############################################################################    
@@ -607,7 +608,7 @@ def init():
         spec2.loader.exec_module(post_process_module)
         PostProcess = post_process_module.PostProcess
     except:
-        PostProcess = lambda DataFrame, score_result_columns, file_reference, dropbox_folder, temp_folder, model_results_index  : DataFrame
+        PostProcess = lambda DataFrame, score_result_columns, file_reference, dropbox_folder, temp_folder, post_process_parameters : DataFrame
         print('ERROR: \n{}'.format(traceback.format_exc()))
         print('No PostProcess tasks executed...\nScored datset will be not modified...')
    ############################################################################### 

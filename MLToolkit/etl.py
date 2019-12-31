@@ -37,6 +37,9 @@ License
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
 
+# IF QUERY HAS DROP TABLE, TRUNCATE TABLE, DELETE, UPDATE, CREATE, set a control flag on (safety)
+# Modify output timing to execute query + row count
+
 from datetime import datetime
 import gc
 import traceback
@@ -47,6 +50,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import re
+import urllib
+import sqlalchemy 
+import csv
+
 try:
     import pyodbc
 except:
@@ -93,17 +100,146 @@ def get_number_units():
 ##[ I/O FUNCTIONS]#############################################################      
 ###############################################################################
 
-def read_data_csv(file, separator=',', encoding=None):
-    DataFrame = pd.read_csv(filepath_or_buffer=file, sep=separator, encoding=encoding)
-    print('{:,d} records were loaded...'.format(len(DataFrame.index)))
+def read_data_csv(file, separator=',', quoting= 'MINIMAL', compression='infer', encoding='utf-8'):
+    """
+    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_csv.html
+    
+    Parameters
+    ----------    
+    file : str
+    separator : str
+    index : bool
+    compression : {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default 'infer'
+    quoting : {'ALL', MINIMAL', 'NONNUMERIC', 'NONE'}, default 'MINIMAL'
+    encoding : {'utf-8', 'utf-16'}, default 'utf-8'
+     
+    Returns
+    -------
+    DataFrame : pandas.DataFrame
+    """
+    if quoting=='ALL':
+        quoting = csv.QUOTE_ALL
+    elif quoting=='MINIMAL':
+        quoting = csv.QUOTE_MINIMAL        
+    elif quoting=='NONNUMERIC':
+        quoting = csv.QUOTE_NONNUMERIC        
+    elif quoting=='NONE':
+        quoting = csv.QUOTE_NONE   
+    
+    try:
+        start_time = timer() 
+        DataFrame = pd.read_csv(filepath_or_buffer=file, sep=separator, quoting=quoting, 
+                                compression=compression, encoding=encoding)  
+    except:
+        execute_time = 0
+        DataFrame = pd.DataFrame()
+        print(traceback.format_exc())
+        
+    execute_time = timer() - start_time
+    
+    print('{:,d} records were loaded. execute time = {} s'.format(len(DataFrame.index), execute_time))
+    
     return DataFrame
 
-def read_data_pickle(file, compression='infer'):
-    DataFrame = pd.read_pickle(path=file, compression=compression)
-    print('{:,d} records were loaded...'.format(len(DataFrame.index)))
-    return DataFrame
+def write_data_csv(DataFrame, file, separator=',', index=False, quoting='ALL', encoding='utf-8', compression='infer', chunksize=None):
+    """
+    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_csv.html
     
-def read_data_sql(query=None, server=None, database=None, auth=None):
+    Parameters
+    ----------    
+    DataFrame : pandas.DataFrame
+    file : str
+    separator : str
+    index : bool
+    compression : {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default 'infer'
+    quoting : {'ALL', MINIMAL', 'NONNUMERIC', 'NONE'}, default 'MINIMAL'
+    encoding : {'utf-8', 'utf-16'}, default 'utf-8'
+    chunksize : int, default None
+    
+    Returns
+    -------
+    None
+    """
+    
+    if quoting=='ALL':
+        quoting = csv.QUOTE_ALL
+    elif quoting=='MINIMAL':
+        quoting = csv.QUOTE_MINIMAL        
+    elif quoting=='NONNUMERIC':
+        quoting = csv.QUOTE_NONNUMERIC        
+    elif quoting=='NONE':
+        quoting = csv.QUOTE_NONE        
+    try:
+        start_time = timer()     
+        DataFrame.to_csv(path_or_buf=file, sep=separator, encoding=encoding, index=index, 
+                         quoting=quoting, compression=compression, chunksize=chunksize)
+        execute_time = timer() - start_time
+    except:
+        execute_time = 0
+        print(traceback.format_exc())
+        
+    print('{:,d} records were written. execute time = {} s'.format(len(DataFrame.index), execute_time))
+    
+    return None
+
+def read_data_pickle(file, compression='infer'):
+    """
+    https://docs.python.org/3/library/pickle.html
+    "Warning The pickle module is not secure against erroneous or maliciously constructed data. 
+    Never unpickle data received from an untrusted or unauthenticated source."
+    
+    Parameters
+    ----------    
+    file : str
+    compression : {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default 'infer'
+    
+    Returns
+    -------
+    DataFrame : pandas.DataFrame
+    """
+    try:
+        start_time = timer() 
+        DataFrame = pd.read_pickle(path=file, compression=compression)
+        execute_time = timer() - start_time
+    except:
+        execute_time = 0
+        print(traceback.format_exc())
+        DataFrame = pd.DataFrame()
+        
+        
+    print('{:,d} records were loaded. execute time = {} s'.format(len(DataFrame.index), execute_time))
+    
+    return DataFrame
+
+def write_data_pickle(DataFrame, file, compression='infer', protocol=3):
+    """
+    https://docs.python.org/3/library/pickle.html
+    "Warning The pickle module is not secure against erroneous or maliciously constructed data. 
+    Never unpickle data received from an untrusted or unauthenticated source."
+    
+    Parameters
+    ----------    
+    DataFrame : pandas.DataFrame
+    file : str
+    compression : {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default 'infer'
+    protocol : int {1, 2, 3, 4}
+        0 is human-readable/backwards compatible with earlier versions of Python
+        read more at https://docs.python.org/3/library/pickle.html
+    Returns
+    -------
+    None    
+    """
+    try:
+        start_time = timer() 
+        DataFrame.to_pickle(path=file, compression=compression, protocol=protocol)
+        execute_time = timer() - start_time
+    except:
+        execute_time = 0
+        print(traceback.format_exc())
+        
+    print('{:,d} records were written. execute time = {} s'.format(len(DataFrame.index), execute_time))
+    
+def read_data_sql(query=None, server=None, database=None, auth=None, params=None):
     """
     Parameters
     ----------
@@ -120,7 +256,9 @@ def read_data_sql(query=None, server=None, database=None, auth=None):
     Returns
     -------
     DataFrame : pandas.DataFrame
-    """    
+    """   
+    execute_time = 0
+    
     if query!=None and server!=None and auth!=None:        
         coerce_float=True
         index_col=None
@@ -135,8 +273,12 @@ def read_data_sql(query=None, server=None, database=None, auth=None):
                 connect_string = r'Driver={SQL Server};SERVER='+server+';DATABASE='+database+';UID='+uid+'r;PWD='+pwd+'}'
             else:
                 raise Exception('No db server authentication method provided!')
-            connection = pyodbc.connect(connect_string)        
+            connection = pyodbc.connect(connect_string)   
+            
+            start_time = timer() 
             DataFrame = pd.read_sql_query(sql=query, con=connection, coerce_float=coerce_float, index_col=index_col, parse_dates=parse_dates)
+            execute_time = timer() - start_time
+            
             connection.close()        
         except:
             print('Database Query Fialed!:\n{}\n'.format(traceback.format_exc()))
@@ -145,11 +287,11 @@ def read_data_sql(query=None, server=None, database=None, auth=None):
         print('No Query provided !')
         DataFrame=pd.DataFrame()
         
-    print('{:,d} records were loaded...'.format(len(DataFrame.index)))
+    print('{:,d} records were loaded. execute time = {} s'.format(len(DataFrame.index), execute_time))
    
     return DataFrame
 
-def write_data_sql(DataFrame, server=None, database=None, schema=None, table=None, dtypes=None, if_exists='fail', auth=None):
+def write_data_sql(DataFrame, server=None, database=None, schema=None, table=None, index=False, dtypes=None, if_exists='fail', auth=None, params=None):
     """
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_sql.html
     
@@ -174,30 +316,239 @@ def write_data_sql(DataFrame, server=None, database=None, schema=None, table=Non
     Returns
     -------
     None
-    """    
+    """ 
+    
+    # Download ODBC Driver https://docs.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server
+    driver = 'ODBC Driver 13 for SQL Server' # 'SQL Server' # 
+    autocommit = 'True'
+    fast_executemany = True
+    execute_time = 0
+    
     if server!=None and  database!=None and schema!=None and table!=None and auth!=None : 
         try:
             if auth['type']=='machine':
-                connect_string = r'Driver={SQL Server};SERVER='+server+';DATABASE='+database+';TRUSTED_CONNECTION=yes;'
+                #connect_string = r'Driver={SQL Server};SERVER='+server+';DATABASE='+database+';TRUSTED_CONNECTION=yes;' #ODBC (slow)
+                connect_string = r'Driver={'+driver+'};SERVER='+server+';DATABASE='+database+';TRUSTED_CONNECTION=yes;autocommit='+autocommit+';'
+                connect_string = urllib.parse.quote_plus(connect_string)
             elif auth['type']=='user':
                 uid =  auth['uid'] 
                 pwd =  auth['pwd'] 
-                connect_string = r'Driver={SQL Server};SERVER='+server+';DATABASE='+database+';UID='+uid+'r;PWD='+pwd+'}'
+                #connect_string = r'Driver={SQL Server};SERVER='+server+';DATABASE='+database+';UID='+uid+'r;PWD='+pwd+'}' #ODBC (slow)
+                connect_string = r'Driver={'+driver+'};SERVER='+server+';DATABASE='+database+';UID='+uid+'r;PWD='+pwd+'; autocommit='+autocommit+';'
+                connect_string = urllib.parse.quote_plus(connect_string)
             else:
-                raise Exception('No db server authentication method provided!')
+                raise Exception('No db server authentication method provided !') 
                 
-            connection = pyodbc.connect(connect_string)  
+            #connection = pyodbc.connect(connect_string) #ODBC (slow)
+            engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect="+connect_string, fast_executemany=fast_executemany)
+            connection = engine
+            
+            start_time = timer() 
             if dtypes==None:
-                DataFrame.to_sql_query(name=table, con=connection, schema=schema, if_exists=if_exists)
+                DataFrame.to_sql(name=table, con=connection, schema=schema, index= index, if_exists=if_exists)
             else:
-                DataFrame.to_sql_query(name=table, con=connection, schema=schema, dtype=dtypes, if_exists=if_exists)
-            connection.close()             
+                DataFrame.to_sql(name=table, con=connection, schema=schema, index= index, dtype=dtypes, if_exists=if_exists)
+            execute_time = timer() - start_time
+            
+            #connection.close() 
+            engine.dispose()
+            rowcount = len(DataFrame.index)
         except:
-            print('Database Query Fialed!:\n{}\n'.format(traceback.format_exc()))
-            DataFrame=pd.DataFrame()
+            print('Database Query Failed! Check If ODBC driver installed. \nIf not, Download ODBC Driver from https://docs.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-serve.:\n{}\n'.format(traceback.format_exc()))
+            rowcount = 0
     else:
         print('Check the destiniation table path (server, database, schema, table, auth) !')
-        DataFrame=pd.DataFrame()        
+        rowcount = 0
+    
+    print('{:,d} records were written. execute time = {} s'.format(rowcount, execute_time))
+    
+    return rowcount
+
+def execute_sql_query(query=None, server=None, database=None, auth=None, params=None):
+    """
+    Parameters
+    ----------
+    query : str
+        SQL SELECT query
+    server : str
+        Database Server
+    database : str
+        Database
+    auth :  dict
+        e.g. auth = {'type':'user', 'uid':'user', 'pwd':'password'} for username password authentication
+             auth = {'type':'machine', 'uid':None, 'pwd':None} for machine authentication
+    params : dict
+        extra parameters (not implemented)
+        
+    Returns
+    -------
+    DataFrame : pandas.DataFrame
+    """        
+    # Download ODBC Driver https://docs.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server
+    driver = 'ODBC Driver 13 for SQL Server' # 'SQL Server' # 
+    autocommit = 'True'
+    fast_executemany = True
+    
+    if server!=None and  database!=None and query!=None and auth!=None :
+        try:
+            if auth['type']=='machine':
+                connect_string = r'Driver={'+driver+'};SERVER='+server+';DATABASE='+database+';TRUSTED_CONNECTION=yes;autocommit='+autocommit+';'
+                connect_string = urllib.parse.quote_plus(connect_string)
+                
+            elif auth['type']=='user':
+                uid =  auth['uid'] 
+                pwd =  auth['pwd'] 
+                connect_string = r'Driver={'+driver+'};SERVER='+server+';DATABASE='+database+';UID='+uid+'r;PWD='+pwd+'; autocommit='+autocommit+';'
+                connect_string = urllib.parse.quote_plus(connect_string)
+                engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect="+connect_string, fast_executemany=fast_executemany)
+            else:
+                raise Exception('No db server authentication method provided !')
+            
+            engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect="+connect_string, fast_executemany=fast_executemany)
+            
+            # connection
+            connection = engine.connect()
+            
+            #transaction
+            trans = connection.begin()
+        
+            # execute
+            start_time = timer() 
+            result = connection.execute(query)
+            execute_time = timer() - start_time
+            
+            try:
+                rowcount = result.rowcount
+                print('{} rows affected. execute time = {} s'.format(rowcount,execute_time))
+            except:
+                rowcount = -1
+                print('ERROR in fetching affected rows count. execute time = {} s'.format(execute_time))
+                
+            # commit
+            trans.commit()
+        
+            # close connections, results set and dispose engine (moved to finally)
+            #connection.close()
+            #result.close()
+            #engine.dispose()
+        except:
+            print(r'ERROR: Check If ODBC driver installed. \nIf not, Download ODBC Driver from https://docs.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server:\n{}\n'.format(traceback.format_exc()))
+            rowcount = 0
+        finally:
+            # close connections, results set and dispose engine
+            try:
+                connection.close()
+            except:
+                print('Failed to close connection !')
+            try:
+                result.close()
+            except:
+                print('Failed to close results !')
+            try:
+                engine.dispose()
+            except:
+                print('Failed to dispose engine !')
+            
+        return rowcount      
+
+def sql_server_database_list(server, auth=None, user_database_only=True):
+    """
+    Reference: https://docs.microsoft.com/en-us/sql/relational-databases/system-compatibility-views/sys-sysdatabases-transact-sql?view=sql-server-2017
+    """
+    
+    query = """
+    SELECT 
+        @@SERVERNAME AS [ServerName],
+        NAME AS [DBName],
+        STATUS AS [Status],
+        CRDATE AS [CreateDate]
+    FROM master.dbo.sysdatabases
+    WHERE Name NOT IN ( 'master','tempdb','model' ,'msdb')
+    """    
+    DBList = read_data_sql(query=query, server=server, database='master', auth=auth, params=None)
+    
+    return DBList
+    
+def sql_server_database_usage_report(server, database, auth=None, schema=None, table=None, user_tables_only=True, dbms='mssql', unit='KB'):
+    """
+    Reference: https://docs.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-tables-transact-sql?view=sql-server-2017
+    """
+    
+    if user_tables_only:
+        user_tables_only_condition = "AND table.is_ms_shipped = 0 " # is_ms_shipped = 1 (indicates this object was shipped or created by Microsoft), 0 (indicates this object was created by a user)
+    else:
+        user_tables_only_condition = ""
+        
+    if schema != None:
+        schema_condition = "AND schema.NAME = '{}'".format(schema)
+    else:
+        schema_condition = ""
+
+    if table != None:
+        table_condition = "AND table.NAME = '{}'".format(table)
+    else:
+        table_condition = ""
+
+    #Unit conversion
+    if unit == 'KB':
+        multiplier = 1.0
+    if unit  == 'MB':
+        multiplier = 1.0/1024.0
+    if unit  == 'GB':
+        multiplier = 1.0/(1024.0*1024.0)  
+    if unit  == 'TB':
+        multiplier = 1.0/(1024.0*1024.0*1024.0) 
+    
+    if dbms == 'mssql':
+        query = """
+        SELECT
+            @@SERVERNAME AS [Server],
+            DB_Name() AS [DB],
+            schema.NAME AS [Schema],
+            table.NAME AS [Table],
+            table.CREATE_DATE AS [CreateDate],
+            table.MODIFY_DATE AS [ModifyDate],		
+            part.ROWS AS [Rows],
+            SUM(alloc.total_pages) * 8 AS [TotalSpaceKBx],
+            SUM(alloc.used_pages) * 8 AS [UsedSpaceKBx],
+        FROM
+            sys.tables table
+        INNER JOIN     
+            sys.indexes ix ON (table.OBJECT_ID = ix.OBJECT_ID)
+        INNER JOIN
+            sys.partitions part ON (ix.OBJECT_ID = part.OBJECT_ID AND ix.index_id = part.index_id)
+        INNER JOIN
+            sys.allocation_units alloc ON (part.PARTITION_ID = alloc.container_id)
+        LEFT OUTER JOIN
+            sys.schemas schema ON (table.SCHEMA_ID = schema.SCHEMA_ID)
+        WHERE
+            table.NAME IS NOT NULL
+            {user_tables_only_condition}
+            {table_condition}
+            {schema_condition}
+        GROUP BY
+            table.NAME, 
+            table.CREATE_DATE, 
+            table.MODIFY_DATE, 
+            schema.NAME, part.ROWS
+        """.format(schema_condition=schema_condition, table_condition=table_condition, user_tables_only_condition=user_tables_only_condition)
+        
+        DBUsageReport = read_data_sql(query=query, server=server, database=database, auth=auth, params=None)
+        
+        DBUsageReport['TotalSpaceKBx'] = DBUsageReport['TotalSpaceKBx'].fillna(0)
+        DBUsageReport['UsedSpaceKBx'] = DBUsageReport['UsedSpaceKBx'].fillna(0)
+        DBUsageReport['AvaiableSpaceKBx'] = DBUsageReport['TotalSpaceKBx'] - DBUsageReport['UsedSpaceKBx']
+        
+        DBUsageReport['TotalSpace{}'.format(unit)] = DBUsageReport['TotalSpaceKBx'] * multiplier
+        DBUsageReport['UsedSpace{}'.format(unit)] = DBUsageReport['UsedSpaceKBx'] * multiplier
+        DBUsageReport['AvaiableSpace{}'.format(unit)] = DBUsageReport['AvaiableSpaceKBx'] * multiplier
+        
+        DBUsageReport = DBUsageReport.drop(columns=['TotalSpaceKBx', 'UsedSpaceKBx', 'AvaiableSpaceKBx'])
+    else:
+        DBUsageReport = pd.DataFrame()
+        print('This function currently supported for MSSQL server only')
+    
+    return DBUsageReport
 
 ###############################################################################
 ##[ VALIDATE FIELDS]##########################################################      
@@ -574,6 +925,34 @@ def create_exponent_variable(DataFrame, variable, base='e', to_variable=None, re
     else:
         return DataFrame 
 
+
+def create_segmented_variable(DataFrame, variable, a=None, b=None, to_variable=None, return_variable=False, return_script=False):
+    if to_variable==None:
+        to_variable = 'SEG{}'.format(variable)  
+    
+    if a == None:
+        a = -np.inf
+    
+    if b == None:
+        b = np.inf
+        
+    DataFrame[to_variable] = DataFrame[variable]
+    DataFrame.loc[DataFrame[to_variable]<a, to_variable] = a
+    DataFrame.loc[DataFrame[to_variable]>b, to_variable] = b
+
+    parameters = { 'a':a, 'b':b }
+    script_dict = generate_create_variable_task_script(type='transform', out_type='cnt', 
+                                                       include=False, operation='segment', 
+                                                       source=variable, destination=to_variable, 
+                                                       parameters=parameters)     
+    if return_script and return_variable:
+        return DataFrame, to_variable, script_dict
+    elif return_script:
+        return DataFrame, script_dict
+    elif return_variable:
+        return DataFrame, to_variable
+    else:
+        return DataFrame         
 ###############################################################################
 ##[ CREATING FEATURES - STR TRANSFORM ]########################################      
 ############################################################################### 
@@ -1066,8 +1445,11 @@ def create_categorical_variable(DataFrame, variable, to_variable, labels_str, ri
         null_ = '0_NA'
 
     edge_values, bin_labels = edge_labels_to_values(labels_str, left_inclusive=not right_inclusive, right_inclusive=right_inclusive)
-        
-    DataFrame[to_variable] = pd.cut(DataFrame[variable], bins=edge_values, labels=bin_labels, right=right_inclusive, include_lowest=True).astype('object')
+    
+    try:    
+        DataFrame[to_variable] = pd.cut(DataFrame[variable], bins=edge_values, labels=bin_labels, right=right_inclusive, include_lowest=True).astype('object')
+    except:
+        DataFrame[to_variable] = null_
 
     DataFrame.loc[DataFrame[variable].isna(), to_variable] = null_
     DataFrame.loc[DataFrame[to_variable].isna(), to_variable] = default_
@@ -1312,20 +1694,24 @@ def create_transformed_variable_task(DataFrame, rule_set, return_variable=False,
     
     if operation=='normalize':
         method = rule_set['parameters']['method']        
-        DataFrame, to_variable, script_dict  = create_normalized_variable(DataFrame, variable, method=method, parameters=parameters, to_variable=to_variable, return_variable=True, return_script=True)
+        DataFrame, to_variable, script_dict = create_normalized_variable(DataFrame, variable, method=method, parameters=parameters, to_variable=to_variable, return_variable=True, return_script=True)
     elif operation=='datepart':
         part = rule_set['parameters']['part']  
-        DataFrame, to_variable, script_dict  = create_datepart_variable(DataFrame, variable, part=part, to_variable=to_variable, return_variable=True, return_script=True)
+        DataFrame, to_variable, script_dict = create_datepart_variable(DataFrame, variable, part=part, to_variable=to_variable, return_variable=True, return_script=True)
     elif operation=='dateadd':
         unit = rule_set['parameters']['unit']  
         value = rule_set['parameters']['value']  
-        DataFrame, to_variable, script_dict  = create_dateadd_variable(DataFrame, variable, unit=unit, value=value, to_variable=to_variable, return_variable=True, return_script=True)
+        DataFrame, to_variable, script_dict = create_dateadd_variable(DataFrame, variable, unit=unit, value=value, to_variable=to_variable, return_variable=True, return_script=True)
     elif operation=='log':
         base = rule_set['parameters']['base']  
-        DataFrame, to_variable, script_dict  = create_log_variable(DataFrame, variable, base=base, to_variable=to_variable, return_variable=True, return_script=True)
+        DataFrame, to_variable, script_dict = create_log_variable(DataFrame, variable, base=base, to_variable=to_variable, return_variable=True, return_script=True)
     elif operation=='exponent':
         base = rule_set['parameters']['base']  
-        DataFrame, to_variable, script_dict  = create_exponent_variable(DataFrame, variable, base=base, to_variable=to_variable, return_variable=True, return_script=True)
+        DataFrame, to_variable, script_dict = create_exponent_variable(DataFrame, variable, base=base, to_variable=to_variable, return_variable=True, return_script=True)
+    elif operation=='exponent':
+        a = rule_set['parameters']['a']  
+        b = rule_set['parameters']['b'] 
+        DataFrame, to_variable, script_dict = create_segmented_variable(DataFrame, variable, a=a, b=b, to_variable=to_variable, return_variable=True, return_script=True)
     else:
         pass # other transformations to be implemented
         
@@ -1571,7 +1957,10 @@ def create_pair_equality_variable_task(DataFrame, rule_set, return_variable=Fals
     variable2 = rule_set['variables']['source2']
     to_variable = rule_set['variables']['destination']
     parameters = rule_set['parameters']
-    magnitude = parameters['magnitude']
+    try:
+        magnitude = parameters['magnitude']
+    except:
+        magnitude = 1
     case = parameters['case']
     
     DataFrame, to_variable, script_dict = create_pair_equality_variable(DataFrame, variable1=variable1, variable2=variable2, to_variable=to_variable, magnitude=magnitude, case=case, 

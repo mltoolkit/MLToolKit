@@ -450,9 +450,9 @@ def build_regression_model(x_train, y_train, model_variables, target_variable=No
         maxiter=model_parameters['MaxIterations']    
         model=smapi.OLS(y_train, x_train)
 
-        startTime = timer()  
+        start_time = timer()  
         model=model.fit(maxiter=maxiter)
-        model_fit_time = timer() - startTime
+        model_fit_time = timer() - start_time
 
         output = model.summary(xname=list(model_variables))
     
@@ -465,11 +465,16 @@ def build_regression_model(x_train, y_train, model_variables, target_variable=No
         Processors = model_parameters['Processors']
         MinSamplesToSplit = model_parameters['MinSamplesToSplit']
     
-        model = RandomForestRegressor(max_depth=MaxDepth, n_jobs=Processors, verbose=1, min_samples_split=MinSamplesToSplit, n_estimators=NTrees)
+        try:
+            verbose = int(model_variables['Verbose'])
+        except:
+            verbose = 0
+               
+        model = RandomForestRegressor(max_depth=MaxDepth, n_jobs=Processors, verbose=verbose, min_samples_split=MinSamplesToSplit, n_estimators=NTrees)
         
-        startTime = timer()      
+        start_time = timer()      
         model.fit(x_train, y_train)  
-        model_fit_time = timer() - startTime
+        model_fit_time = timer() - start_time
     
         Importances = model.feature_importances_
         stdev = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)    

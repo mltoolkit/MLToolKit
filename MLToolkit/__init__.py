@@ -4,12 +4,12 @@
 __docformat__ = 'restructuredtext'
 __name__="mltk"
 __distname__="pymltoolkit"
-__version__="0.1.7"
+__version__="0.1.8"
 __description__= 'End-to-end Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
 __url__="https://mltoolkit.github.io/MLToolKit"
 __create_date__="Sun Jul 01 2018"
-__last_update__="Sat Aug 31 2019"
+__last_update__="Sat Sap 28 2019"
 __license__="""
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """

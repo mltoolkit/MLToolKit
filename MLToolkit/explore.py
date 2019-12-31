@@ -189,7 +189,7 @@ def category_lists(DataFrame, categorical_variables, threshold=50, return_type='
         
     return out
 	
-def variable_frequency(DataFrame, variable, sorted=False, ascending=False, show_plot=False): 
+def variable_frequency(DataFrame, variable, sorted=False, ascending=False, limit=None, show_plot=False): 
     """
     Parameters
     ----------
@@ -198,7 +198,8 @@ def variable_frequency(DataFrame, variable, sorted=False, ascending=False, show_
     variable : str
         Variable to examine the freqeuncy.    
     sorted : bool, default False
-    ascending : bool, default False    
+    ascending : bool, default False   
+    limit : int
     show_plot : bool, default False
         plot results if True
 
@@ -210,21 +211,30 @@ def variable_frequency(DataFrame, variable, sorted=False, ascending=False, show_
     FrequencyTable = DataFrame.groupby(by=x)[[x]].count().astype('int')
     FrequencyTable['CountsFraction%'] = FrequencyTable[x]/FrequencyTable[x].sum() * 100
     FrequencyTable.rename(index=str, columns={x:'Counts'}, inplace=True)
+    
+    if limit != None and type(limit) == int:
+        sorted = True
+        if limit>len(FrequencyTable.index):
+            limit=len(FrequencyTable.index)
+    else:
+        limit=len(FrequencyTable.index)
+        
     if sorted:
         FrequencyTable.sort_values(by=['Counts'], ascending=ascending, inplace =True)
         
     total_row = [FrequencyTable['Counts'].sum(), FrequencyTable['CountsFraction%'].sum()]
     TotalRow = pd.DataFrame(data=[total_row], columns=FrequencyTable.columns, index=np.array(['TOTAL']))
     TotalRow.index.name = FrequencyTable.index.name
+    
+    FrequencyTable = FrequencyTable.head(limit) #limit    
     FrequencyTable = FrequencyTable.append(TotalRow, ignore_index=False)    
         
-    
     if show_plot:
         FrequencyTable.loc[FrequencyTable.index!='TOTAL'][['Counts']].plot(kind='bar')
         
     return FrequencyTable
 
-def variable_response(DataFrame, variable, target_variable, measurement_variable=None, condition=None, sort_by=None, ascending=False, show_plot=False):  
+def variable_response(DataFrame, variable, target_variable, measurement_variable=None, condition=None, sort_by=None, ascending=False, limit=None, show_plot=False):  
     """
     Parameters
     ----------
@@ -271,7 +281,13 @@ def variable_response(DataFrame, variable, target_variable, measurement_variable
     ResponseTable['ResponseFraction%'] = ResponseTable[y]/ResponseTable[y].sum() * 100
     ResponseTable['ResponseRate%'] = ResponseTable[y]/ResponseTable[y0] * 100
     ResponseTable.index = ResponseTable.index.astype(str)
-    
+
+    if limit != None and type(limit) == int:
+        if limit>len(ResponseTable.index):
+            limit=len(ResponseTable.index)
+    else:
+        limit=len(ResponseTable.index)
+        
 #    # Following two lines is to void index name conflict with the column # [1] Imrove this
 #    index_name = ResponseTable.index.name # [1] Imrove this
 #    ResponseTable.index.name = 'index' # [1] Imrove this
@@ -290,6 +306,8 @@ def variable_response(DataFrame, variable, target_variable, measurement_variable
                 ResponseTable[y].sum()/ResponseTable[y0].sum() * 100]
     TotalRow = pd.DataFrame(data=[total_row], columns=ResponseTable.columns, index=np.array(['TOTAL']))
     TotalRow.index.name = ResponseTable.index.name
+    
+    ResponseTable = ResponseTable.head(limit) #limit   
     ResponseTable = ResponseTable.append(TotalRow, ignore_index=False)
     
 #    ResponseTable.index.name = index_name # [1] Imrove this
