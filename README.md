@@ -1,5 +1,7 @@
 # MLToolKit Project 
-www.mltoolkit.org
+www.mltoolkit.org <br>
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3596163.svg)](https://doi.org/10.5281/zenodo.3596163)
+
 ## Current release: PyMLToolkit [v0.1.10]
 
 <img src="https://raw.githubusercontent.com/mltoolkit/MLToolkit/master/MLToolkit.png" height="200">
