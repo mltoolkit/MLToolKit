@@ -55,19 +55,27 @@ def generate_config_file():
     try:  
         if not os.path.exists('API/config.ini'):	
             config = configparser.ConfigParser()    
-            config['DEFAULT']['ModelFolder'] = '{model_folder}'
-            config['DEFAULT']['ModelFile']='{model_file}'
-            config['DEFAULT']['ETLPyScript'] = '{ETLPyScript}'
-            config['DEFAULT']['UploadFolder'] = '{upload_folder}'
+            config['DEFAULT']['Application'] = '{Application}'
             config['DEFAULT']['OutputFilePrefix'] = '{OutputFilePrefix}'
-            config.add_section('SAMPLES')
-            config['SAMPLES']['SampleFileFolder'] = '{sample_folder}'
-            config['SAMPLES']['JSONTestFile'] = '{model_input_data_json}'
-            config['SAMPLES']['BatchInputTestFile'] = '{model_input_data_file}'
-            config.add_section('API')
+            config.add_section('FOLDERS') ###
+            config['FOLDERS']['APIHomeFolder'] = '{api_home_folder}'
+            config['FOLDERS']['ModelFolder'] = '{model_folder}'
+            config['FOLDERS']['DropBoxFolder'] = '{dropbox_folder}'
+            config['FOLDERS']['TempFolder']  = '{temp_folder}'          
+            config['FOLDERS']['SampleFileFolder'] = '{sample_folder}'
+            config.add_section('SAMPLES') ###
+            config['SAMPLES']['JSONTestFile'] = 'test.json'
+            config['SAMPLES']['BatchInputTestFile'] = 'test.csv'
+            config.add_section('MODEL') ###
+            config['MODEL']['ModelFile']='{model_file}'
+            config['MODEL']['ETLPyScript'] = 'ETL.py'
+            config['MODEL']['PostProcessPyScript'] = 'PostProcess.py'
+            config.add_section('API') ###
             config['API']['HostAddress'] = '127.0.0.1'
             config['API']['Port'] = '5000'
-            config['API']['APIHomeFolder'] = '{api_home_folder}'
+            config['API']['URLRecordLimit'] = '1'
+            config['API']['Static'] = 'static'
+            config['API']['HTMLTemplates'] = 'templates'
     
             with open('API/config.ini', 'w') as configfile: 
                 config.write(configfile)
@@ -123,52 +131,78 @@ except:
         
 print('config_file:', config_file)        
 ###############################################################################
-# LOAD SAVED MLMODEL 
+# LOAD CONFIG
 try:
     config = configparser.ConfigParser()
     config.read(config_file)
-    model_folder = config['DEFAULT']['ModelFolder'] 
-    model_file = os.path.join(model_folder, config['DEFAULT']['ModelFile']) 
-    etl_py_script = os.path.join(model_folder, config['DEFAULT']['ETLPyScript'])
-    upload_folder = config['DEFAULT']['UploadFolder'] 
+    application_name = config['DEFAULT']['Application']
     out_file_prefix = config['DEFAULT']['OutputFilePrefix']
-    sample_folder = config['SAMPLES']['SampleFileFolder'] 
+    # FOLDERS
+    api_home_folder = config['FOLDERS']['APIHomeFolder']
+    model_folder = config['FOLDERS']['ModelFolder'] 
+    dropbox_folder = config['FOLDERS']['DropBoxFolder'] 
+    sample_folder = config['FOLDERS']['SampleFileFolder'] 
+    temp_folder = config['FOLDERS']['TempFolder'] 
+    # SAMPLES
     model_input_data_json = os.path.join(sample_folder, config['SAMPLES']['JSONTestFile'])
     model_input_data_file = os.path.join(sample_folder, config['SAMPLES']['BatchInputTestFile'])
+    # MODEL
+    model_file = os.path.join(model_folder, config['MODEL']['ModelFile']) 
+    etl_py_script = os.path.join(model_folder, config['MODEL']['ETLPyScript'])
+    post_process_py_script = os.path.join(model_folder, config['MODEL']['PostProcessPyScript'])
+    # API   
     host_address = config['API']['HostAddress'] #'127.0.0.1'
-    port = config['API']['Port'] #'5000'
-    api_home_folder = config['API']['APIHomeFolder']
-    static_folder = os.path.join(api_home_folder, 'static')
-    html_template_folder = os.path.join(api_home_folder, 'templates')
+    port = config['API']['Port'] #'5000'    
+    record_limit = config['API']['URLRecordLimit']
+    static_folder = os.path.join(api_home_folder, config['API']['Static'])
+    html_template_folder = os.path.join(api_home_folder, config['API']['HTMLTemplates'])    
 except:
     print('ERROR 102: Confuguration file Config.ini not found: \n{}'.format(traceback.format_exc()))
     sys.exit(1) 
 
 print('-'*80) 
-print('model_folder:', model_folder) 
-print('upload_folder:', upload_folder) 
-print('sample_folder:', sample_folder)    
-print('api_home_folder:', api_home_folder) 
-print('static_folder:', static_folder)        
-print('html_template_folder:', html_template_folder)        
+print('ML TooKit Model Server Confuguarion Profile...')
+print('* api_home_folder:', api_home_folder) 
+print('* model_folder:', model_folder) 
+print('* dropbox_folder:', dropbox_folder) 
+print('* temp_folder:', temp_folder) 
+print('* sample_folder:', sample_folder)    
+print('* static_folder:', static_folder)
+print('* html_template_folder:', html_template_folder)                
+print('* model_file:', model_file)        
+print('* etl_py_script:', etl_py_script)   
+print('* post_process_py_script:', post_process_py_script) 
+print('* record_limit:', record_limit)           
+print('* test_input_data_json:', model_input_data_json)      
+print('* test_input_data_file:', model_input_data_file)        
 print('-'*80)
-
-
-
     
 ###############################################################################    
-# ELT FUNCTION TO PROCESS DATA FOR SCORING
+# ETL FUNCTION TO PROCESS DATA FOR SCORING
 try:
     import importlib.util
-    spec = importlib.util.spec_from_file_location("etl_module",etl_py_script)
-    etl_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(etl_module)
+    spec1 = importlib.util.spec_from_file_location("etl_module",etl_py_script)
+    etl_module = importlib.util.module_from_spec(spec1)
+    spec1.loader.exec_module(etl_module)
     ETL = etl_module.ETL
 except:
     ETL = lambda DataFrame : DataFrame
     print('ERROR: \n{}'.format(traceback.format_exc()))
-    print('No ETL tasks executed...\nInput datset not modified...')
+    print('No ETL tasks executed...\nInput datset will be not modified...')
+###############################################################################    
+# POST PROCESS FUNCTION TO TAKE FINAL ACTION ON THE SCORED DATASET
+try:
+    import importlib.util
+    spec2 = importlib.util.spec_from_file_location("post_process_module",post_process_py_script)
+    post_process_module = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(post_process_module)
+    PostProcess = post_process_module.PostProcess
+except:
+    PostProcess = lambda DataFrame, score_result_columns, file_reference, dropbox_folder, temp_folder  : DataFrame
+    print('ERROR: \n{}'.format(traceback.format_exc()))
+    print('No PostProcess tasks executed...\nScored datset will be not modified...')
 ###############################################################################
+    
 # INITIALIZE FLASK APP
 app = flask.Flask(__name__, template_folder=html_template_folder, static_folder=static_folder)  
 
@@ -207,6 +241,18 @@ def send_response(responseObj):
     response.headers.add('Access-Control-Allow-Credentials', True)
     return response
 
+###############################################################################
+def score_routine(model_input_data):
+    #Generate scores
+    edges = MLModelObject.score_parameters['Edges']
+    # model_input_data will be passed to Application ETL function to prepare the dataset to model.
+    scored_data = mltk.score_records(model_input_data, MLModelObject, edges, ETL=ETL, return_type='frame')
+    # Execute post-processing (save to file, upload to DB server, etc)
+    file_reference = str(uuid.uuid4())
+    score_result_columns = [MLModelObject.get_score_variable(), MLModelObject.get_score_label()] # Mandatory field to save
+    output = PostProcess(scored_data, score_result_columns, file_reference, dropbox_folder, temp_folder) # Should return a dataframe
+    output = output.to_json(orient='records')
+    return output  # return JSON 
 ###############################################################################
     
 @app.after_request
@@ -274,7 +320,7 @@ def ml_file():
         
         if file and is_accepted_file_type(file.filename):            
             file_name = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UploadFolder'], file_name)
+            file_path = os.path.join(temp_folder, file_name)
             file.save(file_path)
 
             model_input_data = pd.read_csv(file_path)            
@@ -326,7 +372,7 @@ def input_form():
             
             if file and is_accepted_file_type(file.filename):            
                 file_name = secure_filename(file.filename)
-                file_path = os.path.join(app.config['UploadFolder'], file_name)
+                file_path = os.path.join(temp_folder, file_name) #CHECK THIS
                 file.save(file_path)    
                 model_input_data = pd.read_csv(file_path)              
                 os.remove(file_path)
@@ -380,7 +426,8 @@ def init():
 if __name__ == "__main__":
     #app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
     app.json_encoder = custom_json_encoder
-    app.config['UploadFolder'] = upload_folder
+    app.config['DropBox'] = dropbox_folder
+    app.config['TempFolder'] = temp_folder 
     app.config['SampleFileFolder'] = sample_folder
     app.config['JSON_SORT_KEYS'] = False
     print((" * Loading ML Model and sttrating Flask API server. Please wait few momments to  until the server is fully started."))

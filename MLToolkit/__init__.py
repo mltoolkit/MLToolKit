@@ -4,12 +4,12 @@
 __docformat__ = 'restructuredtext'
 __name__="mltk"
 __distname__="pymltoolkit"
-__version__="0.1.4"
+__version__="0.1.5"
 __description__= 'Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
 __url__="https://github.com/sptennak/MLToolkit"
 __create_date__="Sun Jul 01 2018"
-__last_update__="Sun Jul 14 2019"
+__last_update__="Sun Jul 28 2019"
 __license__="""
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
@@ -75,10 +75,12 @@ warnings.filterwarnings("ignore")
 
 # Package scripts
 from mltk.etl import *
+from mltk.string import *
 from mltk.explore import *
 from mltk.model import *
 from mltk.matrics import *
 from mltk.deploy import *
+#from mltk.project import *
 
 print('mltk=={}'.format(__version__.strip()))
 ###############################################################################

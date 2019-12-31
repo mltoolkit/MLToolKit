@@ -44,8 +44,11 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import re
+import csv
 import warnings
 warnings.filterwarnings("ignore")
+
+from mltk.etl import *
 
 def score(DataFrame, score_variable='Probability', edges=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], score_label='Score'):
     score=np.arange(1, len(edges), 1)
@@ -103,6 +106,8 @@ def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, fill
     elif ml_algorithm=='NN':     
         batch_size=Model.model_parameters['BatchSize']
         y_pred_prob = Model.model_object.predict(x_test, verbose=1, batch_size=batch_size)[:,1]
+    elif ml_algorithm=='CBST':     
+        y_pred_prob = Model.model_object.predict_proba(x_test, verbose=True)[:,1]
         
     DataFrame[score_variable] = y_pred_prob
     DataFrame=score(DataFrame, score_variable=score_variable, edges=edges, score_label=score_label)
@@ -161,7 +166,15 @@ def score_records(record, Model, edges=None, ETL=None, return_type='frame', json
     score_variable = Model.get_score_variable()
     #input_columns = list(ScoreDataset.columns.values) #will not work if column names were cleaned
     result_columns = [score_variable,score_label]
-    ScoreDataset, input_columns = ETL(ScoreDataset)
+    if callable(ETL):
+        ScoreDataset, input_columns = ETL(ScoreDataset)
+    elif type(ETL)==str:
+        try:
+            ScoreDataset, input_columns, category_variables, binary_variables, target_variable = setup_variables_json_config(ScoreDataset, ETL)
+            ScoreDataset, feature_variables, target_variable = to_one_hot_encode(ScoreDataset, category_variables=category_variables, binary_variables=binary_variables, target_variable=target_variable)
+        except:
+            print('Error in JSON variable setup configuration: \n{}\n'.format(traceback.format_exc()))
+            return None
     ScoreDataset = score_processed_dataset(ScoreDataset, Model, edges=edges, score_label=None, fill_missing=0)
     
     if return_type=='json':
@@ -171,4 +184,8 @@ def score_records(record, Model, edges=None, ETL=None, return_type='frame', json
     elif return_type=='frame':
         return ScoreDataset[input_columns+result_columns]
     else:
-        return ScoreDataset[score_label].values[0]      
+        return ScoreDataset[score_label].values[0]   
+    
+def save_output_file(DataFrame, file_path=''):
+    #import csv
+    DataFrame.to_csv(file_path, index=False, quoting=csv.QUOTE_ALL)

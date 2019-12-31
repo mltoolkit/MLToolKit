@@ -53,8 +53,26 @@ warnings.filterwarnings("ignore")
 from mltk.matrics import *
 from mltk.deploy import *
 
+def train_validate_test_split(DataFrame, ratios=(0.6,0.2,0.2)):
+    N = len(DataFrame.index)
+    train_size = ratios[0]/np.sum(ratios)  
+    test_size = ratios[2]/np.sum(ratios[1:3])
+    from sklearn.model_selection import train_test_split
+    TrainDataset, TestDataset = train_test_split(DataFrame, train_size=train_size, random_state=42)
+    ValidateDataset, TestDataset = train_test_split(TestDataset, test_size=test_size, random_state=42)
+    
+    n_train = len(TrainDataset.index)
+    n_validate = len(ValidateDataset.index)
+    n_test = len(TestDataset.index)
+    
+    print('Train Samples: {} [{:.1f}%]'.format(n_train, n_train/N*100))
+    print('Validate Samples: {} [{:.1f}%]'.format(n_validate, n_validate/N*100))
+    print('Test Samples: {} [{:.1f}%]'.format(n_test, n_test/N*100))
+    
+    return TrainDataset, ValidateDataset, TestDataset
+
 class MLModel():
-    def __init__(self, model_attributes, model_parameters, sample_attributes, model_variables, target_variable, score_parameters, model_interpretation, model_evaluation, model_object=None):
+    def __init__(self, model_attributes, model_parameters, sample_attributes, model_variables, variable_setup, target_variable, score_parameters, model_interpretation, model_evaluation, model_object=None):
         self.model_attributes = model_attributes
         self.model_parameters = model_parameters
         self.sample_attributes=sample_attributes
@@ -63,10 +81,14 @@ class MLModel():
         self.score_parameters = score_parameters
         self.model_interpretation=model_interpretation
         self.model_evaluation = model_evaluation
-        self.model_object = model_object
-    
+        self.model_object = model_object 
+        self.variable_setup = variable_setup
+        
     def set_model_object(self, model_object):
         self.model_object = model_object     
+
+    def get_model_algorithm(self):
+        return self.model_parameters['MLAlgorithm']
         
     def get_identifier_variables(self):
         return self.sample_attributes['RecordIdentifiers']
@@ -76,6 +98,12 @@ class MLModel():
     
     def get_model_variables(self):
         return self.model_variables
+    
+    def get_variable_setup(self):
+        return self.variable_setup
+
+    def set_variable_setup(self, variable_setup):
+        self.variable_setup = variable_setup
     
     def get_model_name(self):
         return self.model_attributes['ModelName']
@@ -101,8 +129,11 @@ class MLModel():
     def get_precision_recall_curve(self):
         return self.model_evaluation['PrecisionRecallCurve']
     
-    def get_auc(self):
-        return self.model_evaluation['AUC']
+    def get_auc(self, curve='roc'):
+        if curve=='roc':
+            return self.model_evaluation['ROC_AUC']
+        if curve=='prc':
+            return self.model_evaluation['PRC_AUC']
     
     def set_score_edges(self, edges):
         self.score_parameters['Edges']=edges
@@ -111,11 +142,14 @@ class MLModel():
         import json
         model_manifest= {'model_attributes':self.model_attributes,
                         'model_parameters':self.model_parameters,
-                        'sample_attributes':self.sample_attributes,            
+                        'sample_attributes':self.sample_attributes,  
+                        'roc_auc':self.get_auc(curve='roc'),
+                        'prc_auc':self.get_auc(curve='prc'),
+                        'robustness_table':self.get_robustness_table().to_dict(orient='dict'),
                         }        
         if save==True:
             json_object = json.dumps(model_manifest)          
-            f = open(os.path.join(SavePath, '{}_ModelManifest.json'.format(self.get_model_id())),'w')
+            f = open(os.path.join(save_path, '{}_ModelManifest.json'.format(self.get_model_id())),'w')
             f.write(json_object)
             f.close() 
 
@@ -127,13 +161,14 @@ class MLModel():
         
         description = self.get_model_id()
         
-        auc = self.get_auc()
+        roc_auc = self.get_auc(curve='roc')
+        prc_auc = self.get_auc(curve='prc')
         
         plt.figure(figure, figsize=(8, 6), dpi=80)
         
         ax0 = plt.subplot(231) 
         ROCCurve = self.get_roc_curve()
-        plt.plot(ROCCurve.FPR.values, ROCCurve.TPR.values, linestyle='-', label='{} (area = {:.2f}) '.format(description, auc))
+        plt.plot(ROCCurve.FPR.values, ROCCurve.TPR.values, linestyle='-', label='{} (area = {:.2f}) '.format(description, roc_auc))
         plt.plot([0, 1], [0, 1], color='black', linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
@@ -145,7 +180,7 @@ class MLModel():
         
         ax1 = plt.subplot(234) 
         PrecisionRecallCurve = self.get_precision_recall_curve()
-        plt.plot(PrecisionRecallCurve['Recall'].values, PrecisionRecallCurve['Precision'].values, linestyle='-', label='{}'.format(description))
+        plt.plot(PrecisionRecallCurve['Recall'].values, PrecisionRecallCurve['Precision'].values, linestyle='-', label='{} (auc = {:.2f}) '.format(description, prc_auc))
         plt.legend()
         plt.xlabel('Recall')
         plt.ylabel('Precision')
@@ -344,9 +379,9 @@ def build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, ta
     batch_size = model_parameters['BatchSize']
     #input_shape = model_parameters['InputShape']
     epochs = model_parameters['Epochs']   
-    metrics = model_parameters['metrics']    
-    num_classes = model_parameters['num_classes']      
-    architecture = model_parameters['architecture']
+    metrics = model_parameters['EvalMatrics']    
+    num_classes = model_parameters['NumClasses']      
+    architecture = model_parameters['Architecture']
     
     y_train = keras.utils.to_categorical(y_train, num_classes)
     y_validate = keras.utils.to_categorical(y_validate, num_classes)
@@ -400,9 +435,56 @@ def build_rf_model(x_train, y_train, model_variables, target_variable, model_par
         
     return model, output, model_fit_time
 
+def build_cbst_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters):
+    import catboost
+    from catboost import CatBoostClassifier, Pool
+    import numpy as np
+    
+    # Model Params   
+    num_trees = model_parameters['NTrees']
+    depth = model_parameters['MaxDepth']
+    learning_rate = model_parameters['LearningRate']   
+    imbalanced = model_parameters['Imbalanced']
+    loss_function = model_parameters['LossFunction']
+    eval_metric = model_parameters['EvalMatrics'] 
+    task_type = model_parameters['TaskType']
+    thread_count = model_parameters['Processors'] 
+    use_best_model = model_parameters['UseBestModel'] 
+    verbose=int((num_trees+9)/10)
+
+    if imbalanced==True:
+        sample_size = len(y_train)
+        actual_positives = np.sum(y_train)
+        actual_negatives= sample_size-actual_positives
+        scale_pos_weight = (1.0)*actual_negatives/actual_positives
+    else:
+        scale_pos_weight=1.0
+    
+    model = CatBoostClassifier(num_trees=num_trees,
+                               depth=depth,                               
+                               learning_rate=learning_rate,
+                               loss_function=loss_function,
+                               eval_metric=eval_metric,
+                               scale_pos_weight=scale_pos_weight,
+                               verbose=True, 
+                               task_type = task_type,
+                               thread_count=thread_count)
+    
+    startTime = timer()
+    model.fit(x_train, y_train, eval_set=(x_validate, y_validate), use_best_model=use_best_model, verbose=verbose)
+    model_fit_time = timer() - startTime
+
+    Importances = model.feature_importances_
+    #stdev = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)    
+    output = pd.DataFrame({'Features':model_variables, 'Importances':Importances}).sort_values(by='Importances', ascending=False)        #, 'stdev':stdev
+    
+    score = model.score(x_validate, y_validate)
+    print('Test accuracy:', score)
+       
+    return model, output, model_fit_time        
 
 def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, target_variable, 
-                 model_attributes, sample_attributes, model_parameters, score_parameters,
+                 variable_setup, model_attributes, sample_attributes, model_parameters, score_parameters,
                    return_model_object=False, show_results=False, show_plot=False):
     """
     Parameters
@@ -411,7 +493,8 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     ValidateDataset : pandas.DataFrame
     TestDataset : pandas.DataFrame
     model_variables : dict
-    target_variable : dict 
+    variable_setup : dict
+    target_variable : str 
     model_attributes : dict
     sample_attributes : dict
     model_parameters : dict
@@ -536,29 +619,93 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
         
         y_pred_prob = model.predict(x_test, verbose=1, batch_size=model_parameters['BatchSize'])[:,1]
         TestDataset[score_variable]=y_pred_prob
-        ###############################################################################     
+        ###############################################################################   
+    elif ml_algorithm=='CBST':
+        ###############################################################################
+        import catboost
+        model_attributes['MLTool'] = 'catboost={}'.format(catboost.__version__) 
+        # Cat Boost Model
+        model, summary, model_fit_time= build_cbst_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters)
+        model_interpretation['ModelSummary'] = summary  
+        
+        y_pred_prob = model.predict_proba(x_test, verbose=True, thread_count=model_parameters['Processors'])[:,1]
+        
+        TestDataset[score_variable]=y_pred_prob
+        ###############################################################################
     else:
         raise Exception('No ML Algorithm is given!')
         
     ############################################################################### 
-    model_evaluation['RobustnessTable'], model_evaluation['ROCCurve'], model_evaluation['PrecisionRecallCurve'], model_evaluation['AUC'] = model_performance_matrics(TestDataset, target_variable=target_variable, score_variable=score_variable, quantile_label=quantile_label,  quantiles=quantiles, show_plot=show_plot)        
+    model_evaluation['RobustnessTable'], model_evaluation['ROCCurve'], model_evaluation['PrecisionRecallCurve'], model_evaluation['ROC_AUC'], model_evaluation['PRC_AUC'] = model_performance_matrics(TestDataset, target_variable=target_variable, score_variable=score_variable, quantile_label=quantile_label,  quantiles=quantiles, show_plot=show_plot)        
     if show_results:
         print(model_evaluation['RobustnessTable'])
     ###############################################################################
     
     ###############################################################################
     if return_model_object:
-        Model = MLModel(model_attributes, model_parameters, sample_attributes, model_variables, target_variable, 
-                        score_parameters, model_interpretation, model_evaluation, model_object=model)
+        Model = MLModel(model_attributes, model_parameters, sample_attributes, model_variables, variable_setup, 
+                        target_variable, score_parameters, model_interpretation, model_evaluation, model_object=model)
     else:
-        Model = MLModel(model_attributes, model_parameters, sample_attributes, model_variables, target_variable, 
-                        score_parameters, model_interpretation, model_evaluation, model_object=None)
+        Model = MLModel(model_attributes, model_parameters, sample_attributes, model_variables, variable_setup, 
+                        target_variable, score_parameters, model_interpretation, model_evaluation, model_object=None)
     ###############################################################################   
     # Cleanup memeory
     gc.collect()
     
     #return copy.deepcopy(Model)
     return Model
+
+def build_ml_model_task(DataFrame, model_setup_dict, variables_setup_dict=None):
+    
+    import json
+    import pandas as pd
+    
+    if type(model_setup_dict)==dict:
+        pass
+    else:
+        try:
+            model_setup_dict = json.loads(model_setup_dict) 
+        except:
+            print('ERROR in fitting model:{}\n {}'.format(model_setup_dict, traceback.format_exc()))  
+    
+    if type(DataFrame)==dict:
+        dict_keys = DataFrame.keys()
+        if ('TrainDataset' in dict_keys) and ('ValidateDataset' in dict_keys) and ('TestDataset' in dict_keys):
+            TrainDataset = DataFrame['TrainDataset']
+            ValidateDataset = DataFrame['ValidateDataset']
+            TestDataset = DataFrame['TestDataset']
+        else:
+            print('Data input error check if the input dictionary has keys: "TrainDataset",  "ValidateDataset", "TestDataset" ')
+    else:    
+        TrainDataset, ValidateDataset, TestDataset = train_validate_test_split(DataFrame, ratios=model_setup_dict['sample_split'])
+    
+    Model = build_ml_model(TrainDataset, ValidateDataset, TestDataset, 
+                                  model_variables=model_setup_dict['model_variables'],
+                                  variable_setup = variables_setup_dict,
+                                  target_variable=model_setup_dict['target_variable'],
+                                  model_attributes=model_setup_dict['model_attributes'], 
+                                  sample_attributes=model_setup_dict['sample_attributes'], 
+                                  model_parameters=model_setup_dict['model_parameters'], 
+                                  score_parameters=model_setup_dict['score_parameters'], 
+                                  return_model_object=model_setup_dict['model_outputs']['return_model_object'], 
+                                  show_results=model_setup_dict['model_outputs']['show_results'], 
+                                  show_plot=model_setup_dict['model_outputs']['show_plot']
+                                  )
+    return Model
+
+def model_guages_to_row(Model):
+    guages = [{'Model':Model.get_model_id(),
+                'ROC_AUC':Model.get_auc(curve='roc'),
+                'PRC_AUC':Model.get_auc(curve='prc'),
+            }]
+    return pd.DataFrame(guages)
+    
+def model_guages_comparison(Models):
+    model_guages = pd.DataFrame()
+    for i in range(len(Models)):
+        Model = Models[i]
+        model_guages = model_guages.append(model_guages_to_row(Model), ignore_index=True)
+    return model_guages
 	
 def confusion_matrix_comparison(DataFrame, Models, thresholds=0.5, score_variable=None, save_prediction=False, show_plot=False):
     """
@@ -584,17 +731,22 @@ def confusion_matrix_comparison(DataFrame, Models, thresholds=0.5, score_variabl
             thresholds = thresholds        
     except:
         thresholds = [thresholds]
-        
+    
     ConfusionMatrixComparison=pd.DataFrame()
     
     for i in range(len(Models)):
+        
         Model = Models[i]
-        DataFrame=score_processed_dataset(DataFrame, Model, edges=None, score_label=score_variable, fill_missing=0)
+        if score_variable==None:
+            score_variable = Model.get_score_variable()
+            
+        DataFrame=score_processed_dataset(DataFrame, Model, edges=None, score_label=None, fill_missing=0)
+        
         for threshold in thresholds:            
             model_id = Model.get_model_id()+'_[TH={}]'.format(threshold)    
             target_variable = Model.get_target_variable()
             predict_column = 'Predict'
-            DataFrame[predict_column] = np.where(DataFrame[Model.get_score_variable()]>threshold,1,0)
+            DataFrame[predict_column] = np.where(DataFrame[score_variable]>threshold,1,0)
             ConfusionMatrix=confusion_matrix(DataFrame, actual_variable=target_variable, predcted_variable=predict_column, labels=[0,1], sample_weight=None, totals=True)
             ConfusionMatrixComparison=ConfusionMatrixComparison.append(confusion_matrix_to_row(ConfusionMatrix, ModelID=model_id),ignore_index=True) 
             if save_prediction:

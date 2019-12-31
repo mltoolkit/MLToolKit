@@ -46,15 +46,6 @@ import matplotlib.pyplot as plt
 import re
 import warnings
 warnings.filterwarnings("ignore")
-
-def add_identity_column(DataFrame, id_label='ID', start=1, increment=1):
-    if id_label in DataFrame.columns:
-        print('Column {} exists in the DataFrame'.format(id_label))
-        return DataFrame
-    else:
-        DataFrame.reset_index(drop=True, inplace=True)
-        DataFrame.insert(0, id_label, start+DataFrame.index)
-        return DataFrame
 		
 def data_description(DataFrame, include='all'):
     DataStats = DataFrame.describe(percentiles=[.1, .25, .5, .75, .9], include=include).transpose()
@@ -62,42 +53,6 @@ def data_description(DataFrame, include='all'):
     DataTypes = pd.DataFrame(data=DataFrame.dtypes, columns=['dtypes'])
     DataStats=DataStats.merge(DataTypes, left_index=True, right_index=True, how='left')
     return DataStats
-
-def to_one_hot_encode(DataFrame, category_variables=[], binary_variables=[], target_variable='target', target_type='binary'):
-    # TO DO: If target type is 'multi' apply one hot encoding to target
-    try:
-        VariablesDummies = pd.get_dummies(DataFrame[category_variables]).astype('int8')
-        dummy_variables = list(VariablesDummies.columns.values)
-        DataFrame[dummy_variables] = VariablesDummies
-    except:
-        print('Category columns {} does not specified nor exists'.format(category_variables))
-        
-    try:
-        DataFrame[binary_variables] = DataFrame[binary_variables].astype('int8')
-    except:
-        print('Binary columns {} does not specified nor exists'.format(binary_variables))
-              
-    feature_variables = binary_variables+dummy_variables
-    
-    return DataFrame, feature_variables, target_variable
-
-def train_validate_test_split(DataFrame, ratios=(0.6,0.2,0.2)):
-    N = len(DataFrame.index)
-    train_size = ratios[0]/np.sum(ratios)  
-    test_size = ratios[2]/np.sum(ratios[1:3])
-    from sklearn.model_selection import train_test_split
-    TrainDataset, TestDataset = train_test_split(DataFrame, train_size=train_size, random_state=42)
-    ValidateDataset, TestDataset = train_test_split(TestDataset, test_size=test_size, random_state=42)
-    
-    n_train = len(TrainDataset.index)
-    n_validate = len(ValidateDataset.index)
-    n_test = len(TestDataset.index)
-    
-    print('Train Samples: {} [{:.1f}%]'.format(n_train, n_train/N*100))
-    print('Validate Samples: {} [{:.1f}%]'.format(n_validate, n_validate/N*100))
-    print('Test Samples: {} [{:.1f}%]'.format(n_test, n_test/N*100))
-    
-    return TrainDataset, ValidateDataset, TestDataset
 	
 def histogram(DataFrame, column, n_bins=10, bin_range=None, orientation='vertical', show_plot=False):    
     if show_plot:
@@ -195,25 +150,76 @@ def variable_frequency(DataFrame, variable, sorted=False, ascending=False, show_
         
     return FrequencyTable
 
-def variable_response(DataFrame, variable, target_variable, show_plot=False):   
+def variable_response(DataFrame, variable, target_variable, measurement_variable=None, condition=None, sort_by=None, ascending=False, show_plot=False):  
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    variable : str
+        Variable to examine the freqeuncy.
+    target_variable : str
+        Target variable
+    condition, str, default None 
+        Filtering condition
+    sorted_by : {'count','response','rate'}, default None
+    ascending : bool, default False
+    show_plot : bool, default False
+        plot results if True
+        
+    Returns
+    -------
+    ResponseTable : pandas.DataFram
+    """
+    count_flag = '__count__'
+    DataFrame[count_flag] = 1
+    
     X = variable
     y = target_variable
-    ResponseTable = DataFrame.groupby(by=X)[[X,y]].agg({X:'count',y:'sum'}).astype('int')
-    ResponseTable['CountsFraction%'] = ResponseTable[X]/ResponseTable[X].sum() * 100
+    
+    if measurement_variable!=None and DataFrame[measurement_variable].dtype in (
+            'int_', 'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 
+                'uint32', 'uint64', 'float_', 'float16', 'float32', 'float64'):
+        y0 = measurement_variable
+    else:
+        y0 = count_flag
+    
+    if condition!=None:
+        try:
+            DataFrame = DataFrame.query(condition)
+        except:
+            print('Filtering with {} failed'.format(condition))
+    
+    ResponseTable = DataFrame.groupby(by=X)[[y0,y]].agg({y0:'sum',y:'sum'}).astype('int64')
+    DataFrame.drop(columns=[count_flag])
+    
+    ResponseTable['CountsFraction%'] = ResponseTable[y0]/ResponseTable[y0].sum() * 100
     ResponseTable['ResponseFraction%'] = ResponseTable[y]/ResponseTable[y].sum() * 100
-    ResponseTable['ResponseRate%'] = ResponseTable[y]/ResponseTable[X] * 100
+    ResponseTable['ResponseRate%'] = ResponseTable[y]/ResponseTable[y0] * 100
     ResponseTable.index = ResponseTable.index.astype(str)
-
-    total_row = [ResponseTable[X].sum(),
+    
+#    # Following two lines is to void index name conflict with the column # [1] Imrove this
+#    index_name = ResponseTable.index.name # [1] Imrove this
+#    ResponseTable.index.name = 'index' # [1] Imrove this
+    
+    if sort_by=='count':        
+        ResponseTable.sort_values(by=[y0, y], ascending=ascending, inplace=True, na_position='last')
+    elif sort_by=='response':        
+        ResponseTable.sort_values(by=[y, 'ResponseRate%'], ascending=ascending, inplace=True, na_position='last')
+    elif sort_by=='rate':        
+        ResponseTable.sort_values(by=['ResponseRate%', y], ascending=ascending, inplace=True, na_position='last')    
+    
+    total_row = [ResponseTable[y0].sum(),
                 ResponseTable[y].sum(),
                 ResponseTable['CountsFraction%'].sum(),
                 ResponseTable['ResponseFraction%'].sum(),
-                None]
+                ResponseTable[y].sum()/ResponseTable[y0].sum()]
     TotalRow = pd.DataFrame(data=[total_row], columns=ResponseTable.columns, index=np.array(['TOTAL']))
     TotalRow.index.name = ResponseTable.index.name
     ResponseTable = ResponseTable.append(TotalRow, ignore_index=False)
     
-    ResponseTable.rename(index=str, columns={X:'Counts'}, inplace=True)
+#    ResponseTable.index.name = index_name # [1] Imrove this
+    ResponseTable.rename(index=str, columns={y0:'Counts'}, inplace=True)
     
     if show_plot:
         fig, ax1 = plt.subplots()
@@ -229,13 +235,54 @@ def variable_response(DataFrame, variable, target_variable, show_plot=False):
         ax1.legend().set_visible(False)
         ax2.legend().set_visible(False)
         plt.legend(line1+line2, label1+label2)
-    
+        plt.show() ###    
     return ResponseTable
+	
+def slice_variable_response(DataFrame, variable, condition):
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    variable : str
+        Variable to examine the freqeuncy.
+    condition, str, default None 
+        Filtering condition
+        
+    Returns
+    -------
+    None
+    """
+    for X in sorted(DataFrame[variable].unique()):
+        print('\n\n{}\n'.format(X))
+        print("(ExcludeInModel==0) & ({}=='{}')".format(variable,X))
+        try:
+            print(variable_response(DataFrame, variable='DupePrevScore', target_variable='DupeToCapture', condition="({}) & ({}=='{}')".format(condition, variable,X), show_plot=True))
+        except:
+            print('No resuts found !')
 
 def variable_responses(DataFrame, variables, target_variable, show_output=True, show_plot=False):
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    variable : str
+        Variable to examine the freqeuncy.
+    target_variable : str
+        Target variable
+    show_output, bool, default True 
+        Print output table
+    show_plot : bool, default False
+        plot results if True
+        
+    Returns
+    -------
+    None
+    """
     y = target_variable
     for X in variables:
-        output = variable_response(DataFrame, variable=X, target_variable=y, show_plot=show_plot)
+        output = variable_response(DataFrame, variable=X, target_variable=y, show_plot=show_plot, sort_by=None)
         if show_output:
             print(output)
             
@@ -265,6 +312,20 @@ def plot_variable_responses(DataFrame, variables, target_variable):
         plot_variable_response(DataFrame, variable=X, target_variable=y)	
 
 def correlation_matrix_to_list(correlation, target_variable=None, ascending=False):
+    """
+    Parameters
+    ----------
+    correlation : pandas.DataFrame
+        Correlation matrix
+    target_variable : str
+        Target variable
+    ascending : bool, default False
+        Sort condition
+        
+    Returns
+    -------
+    correlation_list : pandas.DataFrame
+    """
     variables=correlation.columns.values
     n = len(variables)
     correlation_list = []
@@ -290,11 +351,27 @@ def correlation_matrix_to_list(correlation, target_variable=None, ascending=Fals
     return correlation_list.sort_values(by=['|Correlation|'], ascending=ascending) 
 
 def correlation_matrix(DataFrame, variables, target_variable=None, method='pearson', return_type='matrix', show_plot=False):
-    '''
+    """
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.corr.html
+    
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    variables : list(str)
+        List of variables
+    target_variable : str
+        Target variable
     method: {'pearson', 'kendall', 'spearman'} 
     return_type: {'matrix', 'list'}
-    '''
+    show_plot : bool, default False
+        plot results if True
+        
+    Returns
+    -------
+    correlation : pandas.DataFrame
+    """
+
     correlation = DataFrame[variables].corr()
     
     if show_plot:
@@ -307,6 +384,22 @@ def correlation_matrix(DataFrame, variables, target_variable=None, method='pears
     return correlation               
 	
 def univariate_stats(DataFrame, feature_variables, target_variable):
+    """
+    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.corr.html
+    
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    feature_variables : list(str)
+        List of variables
+    target_variable : str
+        Target variable
+        
+    Returns
+    -------
+    Univariate : pandas.DataFrame
+    """
     from sklearn.metrics import confusion_matrix
     Univariate = []
     for i in range(len(feature_variables)):

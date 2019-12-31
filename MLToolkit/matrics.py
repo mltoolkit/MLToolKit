@@ -71,6 +71,9 @@ def plot_model_results(ResultsTable, x_column, y_column, size_column, color_colu
 # ROBUSTNESS TABLE                 
 def robustness_table(ResultsSet, target_variable='Response', score_variable='Probability',  score_label='Score', show_plot=False):  
 
+    if target_variable not in ResultsSet.columns:
+        ResultsSet[target_variable]=None
+        
     RobustnessTable = ResultsSet.groupby(by=[score_label]).agg({score_variable:[min,max,'mean','count'], target_variable:sum})        
     
     RobustnessTable.columns=np.array(['min{}'.format(score_variable), 'max{}'.format(score_variable), 'mean{}'.format(score_variable), 'BucketCount', 'ResponseCount'])
@@ -124,7 +127,7 @@ def model_performance_matrics(ResultsSet, target_variable='Actual', score_variab
     
     ROCCurve = {}  
     ROCCurve['FPR'], ROCCurve['TPR'], ROCCurve['Threshold'] = metrics.roc_curve(ResultsSet[target_variable].values, ResultsSet[score_variable].values)
-    AUC = metrics.auc( ROCCurve['FPR'], ROCCurve['TPR'])
+    roc_auc = metrics.auc( ROCCurve['FPR'], ROCCurve['TPR'])
     ROCCurve = pd.DataFrame(data=ROCCurve)
     
     # undersample curve     
@@ -138,6 +141,7 @@ def model_performance_matrics(ResultsSet, target_variable='Actual', score_variab
     PrecisionRecallCurve['Precision'], PrecisionRecallCurve['Recall'], PrecisionRecallCurve['Threshold'] = metrics.precision_recall_curve(ResultsSet[target_variable].values, ResultsSet[score_variable].values)
     PrecisionRecallCurve['Threshold']=np.insert(PrecisionRecallCurve['Threshold'], 0,0)    
     PrecisionRecallCurve = pd.DataFrame(data=PrecisionRecallCurve)
+    prc_auc = metrics.auc(PrecisionRecallCurve['Recall'], PrecisionRecallCurve['Precision'])
     
     # undersample curve
     if len(PrecisionRecallCurve.index)>10000:
@@ -146,7 +150,7 @@ def model_performance_matrics(ResultsSet, target_variable='Actual', score_variab
         c = PrecisionRecallCurve[-1:]
         PrecisionRecallCurve = a.append(b).append(c).reset_index(drop=True)
     
-    return RobustnessTable, ROCCurve, PrecisionRecallCurve, AUC
+    return RobustnessTable, ROCCurve, PrecisionRecallCurve, roc_auc, prc_auc
 
 ###############################################################################
 #  PLOT EVALUATION MATRICS                  
