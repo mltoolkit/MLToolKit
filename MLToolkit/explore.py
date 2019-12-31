@@ -99,14 +99,18 @@ def train_validate_test_split(DataFrame, ratios=(0.6,0.2,0.2)):
     
     return TrainDataset, ValidateDataset, TestDataset
 	
-def histogram(DataFrame, column, n_bins=10, bin_range=None, orientation='vertical'):       
-    counts, edge_labels, bars = plt.hist(DataFrame[column], bins=n_bins, range=bin_range, orientation=orientation, density=False)
-    plt.xlabel(column)
-    plt.ylabel('bins')
-    plt.grid(True)
+def histogram(DataFrame, column, n_bins=10, bin_range=None, orientation='vertical', show_plot=False):    
+    if show_plot:
+        plt.figure()
+        counts, edge_labels, bars = plt.hist(DataFrame[column], bins=n_bins, range=bin_range, orientation=orientation, density=False)
+        plt.xlabel(column)
+        plt.ylabel('Count')
+        plt.grid(True)
+    else:
+        counts, edge_labels = np.histogram(DataFrame[column], bins=n_bins, range=bin_range, density=False)
     
     try:
-        n = len(n_bins)
+        n = len(n_bins)-1
     except:
         n = n_bins
     
@@ -135,6 +139,11 @@ def variable_frequency(DataFrame, variable):
     x = variable
     FrequencyTable = DataFrame.groupby(by=x)[[x]].count().astype('int')
     FrequencyTable['CountsFraction%'] = FrequencyTable[x]/FrequencyTable[x].sum() * 100
+    total_row = [FrequencyTable[x].sum(), FrequencyTable['CountsFraction%'].sum()]
+    TotalRow = pd.DataFrame(data=[total_row], columns=FrequencyTable.columns, index=np.array(['TOTAL']))
+    TotalRow.index.name = FrequencyTable.index.name
+    FrequencyTable = FrequencyTable.append(TotalRow, ignore_index=False)    
+    FrequencyTable.rename(index=str, columns={x:'Counts'}, inplace=True)    
     return FrequencyTable
 
 def variable_response(DataFrame, variable, class_variable):   
@@ -177,7 +186,6 @@ def plot_variable_response(DataFrame, variable, class_variable):
     ax1.legend().set_visible(False)
     ax2.legend().set_visible(False)
     plt.legend(line1+line2, label1+label2)
-    plt.show()
         
 def plot_variable_responses(DataFrame, variables, class_variable):
     y = class_variable

@@ -4,7 +4,7 @@
 __docformat__ = 'restructuredtext'
 __name__="mltk"
 __distname__="pymltoolkit"
-__version__="0.1.2"
+__version__="0.1.3"
 __description__= 'Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
 __url__="https://github.com/sptennak/MLToolkit"

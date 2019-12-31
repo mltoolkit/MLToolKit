@@ -366,6 +366,6 @@ if __name__ == "__main__":
     app.config['JSON_SORT_KEYS'] = False
     print((" * Loading ML Model and sttrating Flask API server. Please wait few momments to  until the server is fully started."))
     init()
-    app.run(host=host_address, port=port, threaded=False, debug = False)
+    app.run(host=host_address, port=port, threaded=True, debug = False)
 ###############################################################################
 

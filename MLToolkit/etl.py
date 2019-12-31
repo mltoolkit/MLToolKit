@@ -60,8 +60,11 @@ def num_label_to_value(num_label):
         'n':0.000000001,
         'u':0.000001,
         'm':0.001,
-        'c':0.1,
+        'c':0.01,
+        'd':0.1,
         '':1,
+        'D':10,
+        'H':100,
         'K':1000,
         'M':1000000,
         'G':1000000000,
@@ -71,7 +74,7 @@ def num_label_to_value(num_label):
         'INF':np.inf        
         }
     try:
-        sign, inf, num, unit = re.findall('^([-]?)((\d+)([pnumcKMGTPE]?)|INF)$', num_label.rstrip().lstrip())[0]
+        sign, inf, num, unit = re.findall('^([-]?)((\d+)([pnumcdDHKMGTPE]?)|INF)$', num_label.rstrip().lstrip())[0]
         if inf=='INF':
             value = int('{}1'.format(sign))*np.inf
         else:
@@ -111,8 +114,8 @@ def edge_labels_to_values(edge_labels, left_inclusive=False, right_inclusive=Fal
     n_bins = len(edge_labels)-1
     i=0
     for i in range(n_bins):        
-        l_bracket = '(' if (i==0) and ((not left_inclusive) or edge_labels[i]=='-INF') else '['
-        r_bracket = ')' if (i==n_bins-1) and ((not right_inclusive) or edge_labels[i+1]=='INF') else ']'
+        l_bracket = '(' if (i==0 and edge_labels[i]=='-INF') or (not left_inclusive) else '['
+        r_bracket = ')' if (i==n_bins-1 and edge_labels[i+1]=='INF') or (not right_inclusive) else ']'
         edge_values.append(num_label_to_value(edge_labels[i]))
         bin_labels.append('{}_{}{},{}{}'.format(i+1, l_bracket, edge_labels[i], edge_labels[i+1], r_bracket))
     edge_values.append(num_label_to_value(edge_labels[n_bins]))
@@ -126,13 +129,58 @@ def add_missing_feature_columns(DataFrame, expected_features, fill_value=0):
         print('Column [{}] does not exist in the dataset. Created new column and set to {}...'.format(f,fill_value))
     return DataFrame
 
-def numeric_to_category(DataFrame, variable, str_labels, left_inclusive=True, print_output=False, return_variable=False):
-    edge_values, bin_labels = edge_labels_to_values(str_labels, left_inclusive=True)
+def exclude_records(DataFrame, exclude_ondition=None, action = 'flag', exclude_label='_EXCLUDE_'):
+    
+    if exclude_ondition==None:
+        print('No exclude condition...')
+        return DataFrame
+    
+    try:
+        if action=='drop': #Drop Excludes        
+            DataFrame = DataFrame.query('not ({})'.format(exclude_ondition))
+        elif action=='flag': #Create new flagged column
+            DataFrame[exclude_label] = DataFrame.eval(exclude_ondition).astype('int8')
+            print('Records {} -> {}=1'.format(exclude_ondition, exclude_label))
+    except:
+        print('Error in excluding records {}:\n{}\n'.format(exclude_ondition, traceback.format_exc()))
+        
+    return DataFrame
+
+def set_binary_target(DataFrame, target_condition=None, target_variable='_TARGET_'):
+    if target_condition==None: 
+        return DataFrame
+    
+    try:        
+        DataFrame[target_variable] = DataFrame.eval(target_condition).astype('int8')
+    except:
+        print('Error in creating the target variable {}:\n{}\n'.format(target_condition, traceback.format_exc()))
+        
+    return DataFrame  
+
+def numeric_to_category(DataFrame, variable, str_labels, right_inclusive=True, print_output=False, return_variable=False):
+    edge_values, bin_labels = edge_labels_to_values(str_labels, left_inclusive=not right_inclusive, right_inclusive=right_inclusive)
     group_variable = '{}GRP'.format(variable)
-    DataFrame[group_variable] = pd.cut(DataFrame[variable], bins=edge_values, labels=bin_labels)
+    DataFrame[group_variable] = pd.cut(DataFrame[variable], bins=edge_values, labels=bin_labels, right=right_inclusive, include_lowest=True)
     
     if print_output:
-        print(Data.groupby(by=group_variable)[group_variable].count())
+        print(DataFrame.groupby(by=group_variable)[group_variable].count())
+        
+    if return_variable:
+        return DataFrame, group_variable
+    else:
+        return DataFrame
+    
+def variable_to_binary(DataFrame, str_condition, group_variable=None, fill_missing=0, print_output=False, return_variable=False):
+    if group_variable==None:
+        group_variable = '{}'.format(str_condition)
+    else:
+        group_variable = group_variable
+        
+    DataFrame[group_variable] = DataFrame.eval(str_condition).astype('int8').fillna(fill_missing)
+
+        
+    if print_output:
+        print(DataFrame.groupby(by=group_variable)[group_variable].count())
         
     if return_variable:
         return DataFrame, group_variable
