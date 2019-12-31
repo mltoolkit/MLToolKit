@@ -4,12 +4,12 @@
 __docformat__ = 'restructuredtext'
 __name__="mltk"
 __distname__="pymltoolkit"
-__version__="0.1.6"
+__version__="0.1.7"
 __description__= 'End-to-end Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
-__url__="https://mltoolkit.github.io/mltk/"
+__url__="https://mltoolkit.github.io/MLToolKit"
 __create_date__="Sun Jul 01 2018"
-__last_update__="Mon Aug 12 2019"
+__last_update__="Sat Aug 31 2019"
 __license__="""
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
@@ -41,14 +41,14 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/mltoolkit/mltk
+Github: https://github.com/mltoolkit/MLToolKit
 
 License
 -------
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
 
-hard_dependencies = ('numpy', 'scipy', 'matplotlib', 'pandas','sklearn', 'statsmodels','re', 'tensorflow', 'catboost') #'tensorflow'
+hard_dependencies = ('numpy', 'scipy', 'matplotlib', 'pandas','sklearn', 'statsmodels') #,'re', 'tensorflow', 'catboost') #'tensorflow'
 missing_dependencies = []
 
 for dependency in hard_dependencies:
@@ -82,6 +82,7 @@ from mltk.explore import *
 from mltk.model import *
 from mltk.matrics import *
 from mltk.deploy import *
+from mltk.modelchest import *
 from mltk.project import *
 
 print('mltk=={}'.format(__version__.strip()))

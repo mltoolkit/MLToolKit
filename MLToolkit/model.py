@@ -24,7 +24,6 @@ Main Features
 - Auto ML (automated machine learning)
 - Model Deploymet and Serving via RESTful  API
 
-
 Author
 ------
 - Sumudu Tennakoon
@@ -32,7 +31,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/mltoolkit/mltk
+Github: https://mltoolkit.github.io/MLToolKit
 
 License
 -------
@@ -59,20 +58,46 @@ from mltk.deploy import *
 from mltk.etl import *
 
 def train_validate_test_split(DataFrame, ratios=(0.6,0.2,0.2)):
-    N = len(DataFrame.index)
-    train_size = ratios[0]/np.sum(ratios)  
-    test_size = ratios[2]/np.sum(ratios[1:3])
+    """    
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    ratios : tuple
+        E.g. 
+            (train, validate, test) = (0.6, 0.25, 0.15)  
+            (train, test) = (0.6, 0.4) ->  validate = test
+            
+    Returns
+    -------
+    TrainDataset : pandas.DataFrame
+    ValidateDataset : pandas.DataFrame
+    TestDataset : pandas.DataFrame
+    """       
     from sklearn.model_selection import train_test_split
-    TrainDataset, TestDataset = train_test_split(DataFrame, train_size=train_size, random_state=42)
-    ValidateDataset, TestDataset = train_test_split(TestDataset, test_size=test_size, random_state=42)
+    N = len(DataFrame.index)
     
+    if len(ratios)==3:        
+        train_size = ratios[0]/np.sum(ratios)  
+        test_size = ratios[2]/np.sum(ratios[1:3])        
+        TrainDataset, TestDataset = train_test_split(DataFrame, train_size=train_size, random_state=42)
+        ValidateDataset, TestDataset = train_test_split(TestDataset, test_size=test_size, random_state=42)        
+    elif len(ratios)==2:
+        train_size = ratios[0]/np.sum(ratios)
+        TrainDataset, TestDataset = train_test_split(DataFrame, train_size=train_size, random_state=42)
+        ValidateDataset = TestDataset
+        print('Validate = Test')
+    else:
+        print('ERROR in splitting train, validate, test')
+        return None, None, None
+        
     n_train = len(TrainDataset.index)
     n_validate = len(ValidateDataset.index)
     n_test = len(TestDataset.index)
     
     print('Train Samples: {} [{:.1f}%]'.format(n_train, n_train/N*100))
     print('Validate Samples: {} [{:.1f}%]'.format(n_validate, n_validate/N*100))
-    print('Test Samples: {} [{:.1f}%]'.format(n_test, n_test/N*100))
+    print('Test Samples: {} [{:.1f}%]'.format(n_test, n_test/N*100))        
     
     return TrainDataset, ValidateDataset, TestDataset
 
@@ -88,7 +113,13 @@ class MLModel():
         self.model_evaluation = model_evaluation
         self.model_object = model_object 
         self.variable_setup = variable_setup
-        
+    
+    def get_model_type(self):   
+        try:
+            return self.model_attributes['ModelType'] #regression/classification/clautering
+        except:
+            return None
+    
     def set_model_object(self, model_object):
         self.model_object = model_object     
 
@@ -144,11 +175,26 @@ class MLModel():
         return self.model_evaluation['PrecisionRecallCurve']
     
     def get_auc(self, curve='roc'):
-        if curve=='roc':
-            return self.model_evaluation['ROC_AUC']
-        if curve=='prc':
-            return self.model_evaluation['PRC_AUC']
-    
+        try:
+            if curve=='roc':
+                return self.model_evaluation['ROC_AUC']
+            if curve=='prc':
+                return self.model_evaluation['PRC_AUC']
+        except:
+            return None
+        
+    def get_rmse(self):
+        try:
+            return self.model_evaluation['RMSE']
+        except:
+            return None
+
+    def get_r2(self):
+        try:
+            return self.model_evaluation['R2']
+        except:
+            return None
+        
     def set_score_edges(self, edges):
         self.score_parameters['Edges']=edges
 
@@ -166,6 +212,8 @@ class MLModel():
                         'sample_attributes':self.sample_attributes,  
                         'roc_auc':self.get_auc(curve='roc'),
                         'prc_auc':self.get_auc(curve='prc'),
+                        'rmse':self.get_rmse(),
+                        'r2':self.get_r2(),
                         'robustness_table':self.get_robustness_table().to_dict(orient='dict')
                         }        
         if save==True:
@@ -176,83 +224,65 @@ class MLModel():
 
         return model_manifest
     
-    def plot_eval_matrics(self, figure=0, comparison=False):
+    def plot_eval_matrics(self, figure=0, comparison=False, fig_size=(8, 6), layout=(2,3), dpi=80):
         import matplotlib.pyplot as plt
         from matplotlib import colors #For custom color maps
         
         description = self.get_model_id()
+        model_type = self.get_model_type()
+
+        if model_type=='classification':
+            response_quantity_label = 'ResponseCount'
+            bucket_mean_label = 'BucketPrecision'
+            cum_bucket_mean_label = 'CumulativePrecision'
+        elif model_type=='regression':
+            response_quantity_label = 'ResponseAmount'
+            bucket_mean_label = 'BucketMeanAmount'
+            cum_bucket_mean_label = 'CumulativeMeanAmount'
+        else:
+            print('No Model Type provided')
+            return None
         
-        roc_auc = self.get_auc(curve='roc')
-        prc_auc = self.get_auc(curve='prc')
-        
-        plt.figure(figure, figsize=(8, 6), dpi=80)
-        
-        ax0 = plt.subplot(231) 
-        ROCCurve = self.get_roc_curve()
-        plt.plot(ROCCurve.FPR.values, ROCCurve.TPR.values, linestyle='-', label='{} (area = {:.2f}) '.format(description, roc_auc))
-        plt.plot([0, 1], [0, 1], color='black', linestyle='--')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('ROC')
-        plt.legend(loc="lower right")
-        plt.show()
-        
-        ax1 = plt.subplot(234) 
-        PrecisionRecallCurve = self.get_precision_recall_curve()
-        plt.plot(PrecisionRecallCurve['Recall'].values, PrecisionRecallCurve['Precision'].values, linestyle='-', label='{} (auc = {:.2f}) '.format(description, prc_auc))
-        plt.legend()
-        plt.xlabel('Recall')
-        plt.ylabel('Precision')
-        plt.title('Precision-Recall Curve')
-        plt.ylim([0.0, 1.05])
-        plt.xlim([0.0, 1.0])
-        
-        ax2 = plt.subplot(232, sharey=ax1)
-        plt.plot(PrecisionRecallCurve['Threshold'].values, PrecisionRecallCurve['Precision'].values, linestyle='-', label='{}'.format(description))
-        #plt.plot(thresholds, recall[:-1], 'o-', label='{} recall'.format(description))
-        plt.legend()
-        plt.xlabel('Threshold')
-        plt.ylabel('Precision')
-        plt.title('Precision vs. Threshold Curve')
-        plt.ylim([0.0, 1.05])
-        plt.xlim([0.0, 1.0])
-    
-        ax3 = plt.subplot(233, sharex=ax2)
+        plt.figure(figure, figsize=fig_size, dpi=dpi)
+
+        ax3 = plt.subplot(233)
         RobustnessTable = self.get_robustness_table().copy()[:-1]
         #plt.plot(thresholds, precision[:-1], 'o-', label='{} precision'.format(description))
-        plt.plot(RobustnessTable['max{}'.format(self.get_score_parameter('ScoreVariable'))], RobustnessTable['CumulativeBucketFraction'], linestyle='-', label='{}'.format(description)) #, marker='o'
+        x_column = 'CumulativeBucketFraction'
+        y_column = 'CumulativeResponseFraction'
+        plt.plot(list(RobustnessTable[x_column])+[0.0], list(RobustnessTable[y_column])+[0.0], marker=".", linestyle='-', label='{}'.format(description)) #, marker='o'
         plt.legend()
-        plt.xlabel('Threshold')
-        plt.ylabel('Bucket Fraction')
+        plt.xlabel(x_column)
+        plt.ylabel(y_column)
         plt.title('Bucket Fraction vs. Threshold Curve')
-        plt.ylim([0.0, 1.05])
-        plt.xlim([0.0, 1.0])
         
-        ax4 = plt.subplot(235, sharex=ax2)
-        #plt.plot(thresholds, precision[:-1], 'o-', label='{} precision'.format(description))
-        plt.plot(PrecisionRecallCurve['Threshold'].values, PrecisionRecallCurve['Recall'].values, linestyle='-', label='{}'.format(description))
-        plt.legend()
-        plt.xlabel('Threshold')
-        plt.ylabel('Recall')
-        plt.title('Recall vs. Threshold Curve')
-        plt.ylim([0.0, 1.05])
-        plt.xlim([0.0, 1.0])
- 
+        max_x = max(RobustnessTable[x_column])*1.05
+        max_y = max(RobustnessTable[y_column])*1.05   
+
+        plt.plot([0, max(max_x, max_y)], [0, max(max_x, max_y)], color='black', linestyle='--')
+
+        plt.ylim([0.0, max_y])
+        plt.xlim([0.0, max_x])
+            
         ax5 = plt.subplot(236)
-        x_column = 'mean{}'.format(self.get_score_parameter('ScoreVariable'))
-        y_column = 'BucketPrecision'
+        x_column = 'Mean{}'.format(self.get_score_parameter('ScoreVariable'))
+        y_column = bucket_mean_label
         size_column = 'ResponseFraction' 
+
+        max_x = max(RobustnessTable[x_column])*1.05
+        max_y = max(RobustnessTable[y_column])*1.05  
         
-        plt.plot([0, 1], [0, 1], color='black', linestyle='--')
+        plt.plot([0, max(max_x, max_y, 1)], [0, max(max_x, max_y, 1)], color='black', linestyle='--')
         plt.xlabel(x_column)
         plt.ylabel(y_column)
         plt.title('Model Charateristics \n ResponseFraction ~ Marker size')
-        plt.ylim([0.0, 1.05])
-        plt.xlim([0.0, 1.0])
+        
+        plt.ylim([0.0, max_y])
+        plt.xlim([0.0, max_x])
+        
         size_scale=2000 
         size_offset=1      		
+        
         if comparison:
             plt.scatter(RobustnessTable[x_column], RobustnessTable[y_column], s=size_offset+RobustnessTable[size_column].values*size_scale, label='{}'.format(description))
             plt.legend()
@@ -266,7 +296,66 @@ class MLModel():
             plt.scatter(RobustnessTable[x_column], RobustnessTable[y_column], c=RobustnessTable[color_column].values*color_scale, s=size_offset+RobustnessTable[size_column].values*size_scale, cmap='nipy_spectral', norm=norm, marker='s')
             cbar = plt.colorbar()
             cbar.set_label(color_column)  
-
+        
+        #############################
+        if model_type=='regression':
+            pass
+        elif model_type=='classification':    
+            roc_auc = self.get_auc(curve='roc')
+            prc_auc = self.get_auc(curve='prc')
+            
+            plot_tile = {
+                    'ROC':231,
+                    'PvTH':232,
+                    'RFvCF':233,
+                    'PRC':234,               
+                    'RvTH':235,
+                    'PREDvACT': 236
+                    }
+            
+            ax0 = plt.subplot(231) 
+            ROCCurve = self.get_roc_curve()
+            plt.plot(ROCCurve.FPR.values, ROCCurve.TPR.values, linestyle='-', label='{} (area = {:.2f}) '.format(description, roc_auc))
+            plt.plot([0, 1], [0, 1], color='black', linestyle='--')
+            plt.xlim([0.0, 1.0])
+            plt.ylim([0.0, 1.05])
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.title('ROC')
+            plt.legend(loc="lower right")
+            #plt.show()
+            
+            ax1 = plt.subplot(234) 
+            PrecisionRecallCurve = self.get_precision_recall_curve()
+            plt.plot(PrecisionRecallCurve['Recall'].values, PrecisionRecallCurve['Precision'].values, linestyle='-', label='{} (auc = {:.2f}) '.format(description, prc_auc))
+            plt.legend()
+            plt.xlabel('Recall')
+            plt.ylabel('Precision')
+            plt.title('Precision-Recall Curve')
+            plt.ylim([0.0, 1.05])
+            plt.xlim([0.0, 1.0])
+            
+            ax2 = plt.subplot(232, sharey=ax1, sharex=ax3)
+            plt.plot(PrecisionRecallCurve['Threshold'].values, PrecisionRecallCurve['Precision'].values, linestyle='-', label='{}'.format(description))
+            #plt.plot(thresholds, recall[:-1], 'o-', label='{} recall'.format(description))
+            plt.legend()
+            plt.xlabel('Threshold')
+            plt.ylabel('Precision')
+            plt.title('Precision vs. Threshold Curve')
+            plt.ylim([0.0, 1.05])
+            plt.xlim([0.0, 1.0])
+            
+            ax4 = plt.subplot(235, sharex=ax2)
+            #plt.plot(thresholds, precision[:-1], 'o-', label='{} precision'.format(description))
+            plt.plot(PrecisionRecallCurve['Threshold'].values, PrecisionRecallCurve['Recall'].values, linestyle='-', label='{}'.format(description))
+            plt.legend()
+            plt.xlabel('Threshold')
+            plt.ylabel('Recall')
+            plt.title('Recall vs. Threshold Curve')
+            plt.ylim([0.0, 1.05])
+            plt.xlim([0.0, 1.0])
+        #######################
+        
         plt.subplots_adjust(hspace=0.4)
         #plt.show()
 
@@ -276,19 +365,26 @@ def load_tensorflow_model(file_path):
     return model
         
 def load_object(file_name):
-    import pickle
-    pickle_in = open(file_name,'rb')
-    print('Loading model from file {}'.format(file_name))
-    object = pickle.load(pickle_in)
-    pickle_in.close()
-    return object
-
+    try:
+        import pickle
+        pickle_in = open(file_name,'rb')
+        print('Loading model from file {}'.format(file_name))
+        object = pickle.load(pickle_in)
+        pickle_in.close()
+        return object
+    except:
+        print('ERROR in loading model: {}'.format(traceback.format_exc()))
+        return None
+    
 def save_object(object_to_save, file_name):
-    import pickle
-    pickle_out = open(file_name,'wb')
-    print('Saving model to file {}'.format(file_name))
-    pickle.dump(object_to_save, pickle_out)
-    pickle_out.close()
+    try:
+        import pickle
+        pickle_out = open(file_name,'wb')
+        print('Saving model to file {}'.format(file_name))
+        pickle.dump(object_to_save, pickle_out)
+        pickle_out.close()
+    except:
+        print('ERROR in saving model: {}'.format(traceback.format_exc()))
 
 def save_model(Model, file_path):
     """
@@ -325,8 +421,79 @@ def load_model(file_path):
         model = load_tensorflow_model(os.path.splitext(file_path)[0]+'.tfh5')
         Model.set_model_object(model)
     return Model
+
+def build_regression_model(x_train, y_train, model_variables, target_variable=None, model_parameters=None):
+    """
+    Parameters
+    ----------
+    x_train : np.array
+    y_train : np.array
+    model_variables : list(str)
+    target_variable : str
+    model_parameters : dict
+    
+    Returns
+    -------
+    model : mltk.MLModel
+    output : dict
+    model_fit_time : float
+    """
+    from timeit import default_timer as timer
+    
+    MLAlgorithm = model_parameters['MLAlgorithm']    
+    
+    if MLAlgorithm == 'LREG':
+        import statsmodels as sm
+        import statsmodels.discrete.discrete_model as sm
+        import statsmodels.api as smapi
+
+        maxiter=model_parameters['MaxIterations']    
+        model=smapi.OLS(y_train, x_train)
+
+        startTime = timer()  
+        model=model.fit(maxiter=maxiter)
+        model_fit_time = timer() - startTime
+
+        output = model.summary(xname=list(model_variables))
+    
+    elif MLAlgorithm == 'RFREG':
+        from sklearn.ensemble import RandomForestRegressor
+        from sklearn.datasets import make_regression
+
+        NTrees = model_parameters['NTrees']
+        MaxDepth = model_parameters['MaxDepth']
+        Processors = model_parameters['Processors']
+        MinSamplesToSplit = model_parameters['MinSamplesToSplit']
+    
+        model = RandomForestRegressor(max_depth=MaxDepth, n_jobs=Processors, verbose=1, min_samples_split=MinSamplesToSplit, n_estimators=NTrees)
+        
+        startTime = timer()      
+        model.fit(x_train, y_train)  
+        model_fit_time = timer() - startTime
+    
+        Importances = model.feature_importances_
+        stdev = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)    
+        output = pd.DataFrame({'Features':model_variables, 'Importances':Importances, 'stdev':stdev}).sort_values(by='Importances', ascending=False)       
+
+    return model, output, model_fit_time
 	
 def build_logit_model(x_train, y_train, model_variables, target_variable, model_parameters):
+    """
+    Parameters
+    ----------
+    x_train : np.array
+    y_train : np.array
+    model_variables : list(str)
+    target_variable : str
+    model_parameters : dict
+    
+    Returns
+    -------
+    model : mltk.MLModel
+    output : dict
+    model_fit_time : float
+    """
+    
     import statsmodels as sm
     import statsmodels.discrete.discrete_model as sm
     import statsmodels.api as smapi
@@ -390,6 +557,24 @@ def stack_tf_layers_sequential(architecture, print_summary=False):
     return model
     
 def build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters):
+    """
+    Parameters
+    ----------
+    x_train : np.array
+    y_train : np.array
+    x_validate : np.array
+    y_validate : np.array  
+    model_variables : list(str)
+    target_variable : str
+    model_parameters : dict
+    
+    Returns
+    -------
+    model : mltk.MLModel
+    output : dict
+    model_fit_time : float
+    """
+    
     import tensorflow as tf
     import tensorflow.keras as keras
     #from tensorflow.keras.models import Sequential
@@ -440,11 +625,16 @@ def build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, ta
 def build_rf_model(x_train, y_train, model_variables, target_variable, model_parameters):
     from sklearn.ensemble import RandomForestClassifier
     
+    try:
+        verbose = int(model_variables['Verbose'])
+    except:
+        verbose = 0
+        
     NTrees = model_parameters['NTrees']
     MaxDepth = model_parameters['MaxDepth']
     Processors = model_parameters['Processors']
     MinSamplesToSplit = model_parameters['MinSamplesToSplit']
-    model = RandomForestClassifier(n_estimators=NTrees, max_depth=MaxDepth, n_jobs=Processors, verbose=1, min_samples_split=MinSamplesToSplit)
+    model = RandomForestClassifier(n_estimators=NTrees, max_depth=MaxDepth, n_jobs=Processors, verbose=verbose, min_samples_split=MinSamplesToSplit)
 
     startTime = timer()      
     model.fit(x_train, y_train)  
@@ -457,6 +647,9 @@ def build_rf_model(x_train, y_train, model_variables, target_variable, model_par
     return model, output, model_fit_time
 
 def build_cbst_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters):
+    """
+    
+    """
     import catboost
     from catboost import CatBoostClassifier, Pool
     import numpy as np
@@ -565,6 +758,8 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     model_evaluation={}
     
     # ModelAttributes 
+    import mltk
+    model_attributes['MLTKVersion'] = mltk.__version__
     model_attributes['BuiltTime'] = datetime.now().strftime('%Y%m%d%H%M%S')
     model_attributes['ModelID'] = model_attributes['ModelName'].replace(' ', '').upper()+model_parameters['MLAlgorithm'].replace(' ', '').upper()+model_attributes['BuiltTime']  
     model_attributes['ModelFitTime']=-1
@@ -598,7 +793,37 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     
     ml_algorithm = model_parameters['MLAlgorithm']
     
-    if ml_algorithm=='LGR':
+    if ml_algorithm=='LREG':
+        ###############################################################################
+        import statsmodels
+        model_attributes['MLTool'] = 'statsmodels={}'.format(statsmodels.__version__) 
+        # Logit Model
+        model, summary, model_fit_time = build_regression_model(x_train, y_train, model_variables, target_variable, model_parameters)
+        model_interpretation['ModelSummary'] = summary    
+
+#        y_pred_prob = model.predict(x_validate)
+#        ValidateDataset[score_variable]=y_pred_prob
+        
+        y_pred = model.predict(x_test)
+        TestDataset[score_variable] = y_pred
+        ###############################################################################
+
+    elif ml_algorithm=='RFREG':
+        ###############################################################################
+        import sklearn
+        model_attributes['MLTool'] = 'sklearn={}'.format(sklearn.__version__) 
+        # Random Forest Model
+        model, summary, model_fit_time= build_regression_model(x_train, y_train, model_variables, target_variable, model_parameters)
+        model_interpretation['ModelSummary'] = summary  
+        
+#        y_pred_prob = model.predict(x_validate)
+#        ValidateDataset[score_variable]=y_pred_prob
+        
+        y_pred = model.predict(x_test)
+        TestDataset[score_variable] = y_pred
+        ###############################################################################
+        
+    elif ml_algorithm=='LGR':
         ###############################################################################
         import statsmodels
         model_attributes['MLTool'] = 'statsmodels={}'.format(statsmodels.__version__) 
@@ -657,9 +882,15 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
         ###############################################################################
     else:
         raise Exception('No ML Algorithm is given!')
-        
+    
+    model_attributes['ModelFitTime'] = model_fit_time
     ############################################################################### 
-    model_evaluation['RobustnessTable'], model_evaluation['ROCCurve'], model_evaluation['PrecisionRecallCurve'], model_evaluation['ROC_AUC'], model_evaluation['PRC_AUC'] = model_performance_matrics(TestDataset, target_variable=target_variable, score_variable=score_variable, quantile_label=quantile_label,  quantiles=quantiles, show_plot=show_plot)        
+    if ml_algorithm[-3:]=='REG':
+        model_evaluation['RobustnessTable'], model_evaluation['ROCCurve'], model_evaluation['PrecisionRecallCurve'], model_evaluation['ROC_AUC'], model_evaluation['PRC_AUC'] = model_performance_matrics(TestDataset, target_variable=target_variable, score_variable=score_variable, quantile_label=quantile_label,  quantiles=quantiles, problem_type='regression', show_plot=show_plot)  
+        model_evaluation['RMSE'], model_evaluation['R2'] = get_regression_errors(TestDataset, target_variable=target_variable, predicted_variable=score_variable)
+    else:
+        model_evaluation['RobustnessTable'], model_evaluation['ROCCurve'], model_evaluation['PrecisionRecallCurve'], model_evaluation['ROC_AUC'], model_evaluation['PRC_AUC'] = model_performance_matrics(TestDataset, target_variable=target_variable, score_variable=score_variable, quantile_label=quantile_label,  quantiles=quantiles, problem_type='classification', show_plot=show_plot)        
+
     if show_results:
         print(model_evaluation['RobustnessTable'])
     ###############################################################################

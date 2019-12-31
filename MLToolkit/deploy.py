@@ -30,7 +30,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/mltoolkit/mltk
+Github: https://mltoolkit.github.io/MLToolKit/
 
 License
 -------
@@ -54,12 +54,26 @@ warnings.filterwarnings("ignore")
 from mltk.etl import *
 
 def score(DataFrame, score_variable='Probability', edges=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], score_label='Score'):
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    score_variable : str
+        Name of the variable where the score is based on.    
+    edges : list(float)  
+    score_label : str, default 'Score'
+
+    Returns
+    -------
+    DataFrame : pandas.DataFrame
+    """
     score=np.arange(1, len(edges), 1)
     #Ref: https://pandas.pydata.org/pandas-docs/stable/generated/pandas.cut.html
     DataFrame[score_label]=pd.cut(DataFrame[score_variable], bins=edges, labels=score, include_lowest=True, right=True).astype('int8')          
     return DataFrame
 
-def set_predicted_columns(DataFrame, score_variable, threshold=0.5, predicted_label='Predicted', fill_missing=0):
+def set_predicted_column(DataFrame, score_variable, threshold=0.5, predicted_label='Predicted', fill_missing=0):
     """
     Parameters
     ----------
@@ -75,37 +89,49 @@ def set_predicted_columns(DataFrame, score_variable, threshold=0.5, predicted_la
     DataFrame : pandas.DataFrame
     """
     str_condition = '{}>{}'.format(score_variable, threshold)
+
     DataFrame[predicted_label] = DataFrame.eval(str_condition).astype('int8').fillna(fill_missing)    
     #np.where(TestDataset[score_variable]>threshold,1,0)
     return DataFrame
           
-def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, threshold=None, predicted_label='Predicted', fill_missing=0, verbose=False):    
+def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, score_variable=None, 
+                            threshold=None, predicted_label='Predicted', fill_missing=0, verbose=False):    
+    
     target_variable = Model.get_target_variable()
     model_variables = Model.get_model_variables()
-    score_variable = Model.get_score_variable()   
     
     if edges==None:
-        edges=Model.get_score_parameter('Edges')
+        edges = Model.get_score_parameter('Edges')
     
     if threshold==None:
-        threshold =Model.get_score_parameter('Threshold')
+        threshold = Model.get_score_parameter('Threshold')
         
     if score_label==None:
-        score_label=Model.get_score_parameter('ScoreLabel')
+        score_label = Model.get_score_parameter('ScoreLabel')
+
+    if score_variable==None:
+        score_variable = Model.get_score_parameter('ScoreVariable')
         
     # Blanck columns for non-existance variables
     missing_variables = list(set(model_variables) - set(DataFrame.columns)) # Find columns not found in the dataset
+    
     for f in missing_variables:
         DataFrame[f]=fill_missing
         if verbose:
             print('Column [{}] does not exist in the dataset. Created new column and set to {}...'.format(f,missing_variables))
         
     x_test = DataFrame[model_variables].values
+    
     if verbose:
         print('Test Samples: {} loded...'.format(x_test.shape[0]))
     
     ml_algorithm = Model.model_parameters['MLAlgorithm']    
-    if ml_algorithm=='LGR':
+
+    if ml_algorithm=='LREG':
+        y_pred_prob = Model.model_object.predict(x_test)  
+    elif ml_algorithm=='RFREG':
+        y_pred_prob = Model.model_object.predict(x_test) 
+    elif ml_algorithm=='LGR':
         y_pred_prob = Model.model_object.predict(x_test)
     elif ml_algorithm=='RF':        
         y_pred_prob = Model.model_object.predict_proba(x_test)[:,1]
@@ -116,12 +142,14 @@ def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, thre
         y_pred_prob = Model.model_object.predict_proba(x_test, verbose=True)[:,1]
         
     DataFrame[score_variable] = y_pred_prob
-    DataFrame=score(DataFrame, score_variable=score_variable, edges=edges, score_label=score_label)
-    DataFrame = set_predicted_columns(DataFrame, score_variable=score_variable, threshold=threshold, predicted_label=predicted_label, fill_missing=0)
+    DataFrame = score(DataFrame, score_variable=score_variable, edges=edges, score_label=score_label)
+        
+    DataFrame = set_predicted_column(DataFrame, score_variable=score_variable, threshold=threshold, predicted_label=predicted_label, fill_missing=0)
     
     return DataFrame
 	
-def score_records(record, Model, edges=None, threshold=None, ETL=None, variables_setup_dict=None, return_type='frame', json_orient='records'):
+def score_records(record, Model, edges=None, threshold=None, score_label=None, score_variable=None, predicted_label=None,
+                  ETL=None, variables_setup_dict=None, return_type='frame', json_orient='records', input_columns=None, return_input=False):
     """
     Parameters
     ----------
@@ -153,6 +181,11 @@ def score_records(record, Model, edges=None, threshold=None, ETL=None, variables
     ScoreDataset : {pandas.DataFrame, JSON str, dict}
         Output type based on the parameter return_type
     """
+
+    import json 
+    if type(record)==dict: # This is just a work around to handle when dictionary used as an input. Need to find a betetr way
+        record = json.dumps(record)
+        
     if ETL==None:
         print('No ETL function provided')
         return None
@@ -161,7 +194,7 @@ def score_records(record, Model, edges=None, threshold=None, ETL=None, variables
         ScoreDataset=record
     else:    
         try:
-            import json
+            #import json
             try:
                 ScoreDataset = pd.read_json(record, orient=json_orient)
             except:
@@ -170,9 +203,23 @@ def score_records(record, Model, edges=None, threshold=None, ETL=None, variables
             print('Input data parsing error: \n{}\n'.format(traceback.format_exc()))
             return None
     
-    score_label = Model.get_score_label()
-    score_variable = Model.get_score_variable()
-    predicted_label = Model.get_predicted_label()
+    try:
+        if input_columns == None or input_columns == []:
+            pass
+        else:
+            ScoreDataset = ScoreDataset[input_columns]
+    except:
+        print('Input data error: \n{}\n'.format(traceback.format_exc()))
+    
+
+    if score_label==None:
+        score_label=Model.get_score_parameter('ScoreLabel')
+        
+    if score_variable==None:
+        score_variable=Model.get_score_parameter('ScoreVariable')
+
+    if predicted_label==None:
+        predicted_label=Model.get_score_parameter('PredictedLabel')
 
     #input_columns = list(ScoreDataset.columns.values) #will not work if column names were cleaned
     result_columns = [score_variable, score_label, predicted_label]
@@ -185,16 +232,58 @@ def score_records(record, Model, edges=None, threshold=None, ETL=None, variables
         except:
             print('Error in JSON variable setup configuration: \n{}\n'.format(traceback.format_exc()))
             return None
-    ScoreDataset = score_processed_dataset(ScoreDataset, Model, edges=edges, score_label=None, threshold=threshold, predicted_label=predicted_label, fill_missing=0)
+        
+    ScoreDataset = score_processed_dataset(ScoreDataset, Model, edges=edges, score_label=score_label, score_variable=score_variable, threshold=threshold, predicted_label=predicted_label, fill_missing=0)
     
-    if return_type=='json':
-        return ScoreDataset[input_columns+result_columns].to_json(orient=json_orient)
-    elif return_type=='dict':
-        return ScoreDataset[input_columns+result_columns].to_dict(orient=json_orient)
-    elif return_type=='frame':
-        return ScoreDataset[input_columns+result_columns]
+    if return_input:
+        if return_type=='json':
+            return ScoreDataset[input_columns+result_columns].to_json(orient=json_orient), list(input_columns)
+        elif return_type=='dict':
+            return ScoreDataset[input_columns+result_columns].to_dict(orient=json_orient), list(input_columns)
+        elif return_type=='frame':
+            return ScoreDataset[input_columns+result_columns], list(input_columns)
+        else:
+            return ScoreDataset[score_label].values[0], list(input_columns) 
     else:
-        return ScoreDataset[score_label].values[0]   
+        if return_type=='json':
+            return ScoreDataset[input_columns+result_columns].to_json(orient=json_orient)
+        elif return_type=='dict':
+            return ScoreDataset[input_columns+result_columns].to_dict(orient=json_orient)
+        elif return_type=='frame':
+            return ScoreDataset[input_columns+result_columns]
+        else:
+            return ScoreDataset[score_label].values[0]   
+
+def calculate_expected_value(DataFrame, predicted_variable, probability_variable, ev_variable='EV'):
+    """
+    ev = predicted_value * probability
+    
+    Parameters
+    ----------
+    DataFrame:
+    predicted_variable:
+    probability_variable:
+        
+    Returns
+    -------   
+    DataFrame     
+    
+    """
+    DataFrame[ev_variable] = DataFrame[predicted_variable] * DataFrame[probability_variable]
+    
+    return DataFrame
+
+def ev_score(DataFrame, predicted_variable, probability_variable, edges, ev_variable='EV', score_label='EVScore'):
+    try:
+        DataFrame = calculate_expected_value(DataFrame, predicted_variable=predicted_variable, 
+                                             probability_variable=probability_variable, ev_variable=ev_variable)
+        DataFrame = score(DataFrame, score_variable=ev_variable, edges=edges, score_label=score_label)   
+        
+    except:
+        print('Error in JSON variable setup configuration: \n{}\n'.format(traceback.format_exc()))
+        DataFrame[score_label] = None
+    
+    return DataFrame
     
 def save_output_file(DataFrame, file_path=''):
     #import csv

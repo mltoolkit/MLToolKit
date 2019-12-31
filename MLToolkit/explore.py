@@ -29,7 +29,7 @@ Author
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
-Github: https://github.com/mltoolkit/mltk
+Github: https://mltoolkit.github.io/MLToolKit
 
 License
 -------
@@ -74,7 +74,7 @@ def histogram(DataFrame, variable, n_bins=10, bin_range=None, orientation='verti
     out : JSON str or dict
     
     """
-    counts, edge_labels = np.histogram(DataFrame[variable], bins=n_bins, range=bin_range, density=False)
+    counts, edge_labels = np.histogram(DataFrame[variable].dropna(), bins=n_bins, range=bin_range, density=False)
     
     try:
         n = len(n_bins)-1
@@ -91,7 +91,7 @@ def histogram(DataFrame, variable, n_bins=10, bin_range=None, orientation='verti
     Table.index.name = variable
     
     if density:
-        density_, edge_labels_ = np.histogram(DataFrame[variable], bins=n_bins, range=bin_range, density=True)
+        density_, edge_labels_ = np.histogram(DataFrame[variable].dropna(), bins=n_bins, range=bin_range, density=True)
         Table['density'] = density_
         
     TotalRow = pd.DataFrame(data=[Table['counts'].sum()], columns=['counts'], index=np.array(['TOTAL']))
@@ -115,6 +115,48 @@ def histogram(DataFrame, variable, n_bins=10, bin_range=None, orientation='verti
         plt.show()
     
     return Table
+
+def crosstab(DataFrame, variable1, variable2, margins=True, normalize_axis=None , show_plot=False):
+    
+    if normalize_axis=='row':
+        normalize = 'index'
+    elif normalize_axis=='columns':
+        normalize = 'columns'
+    elif normalize_axis=='all':
+        normalize = 'all' 
+    else:
+        normalize = False
+        
+    table = pd.crosstab(DataFrame[variable1], DataFrame[variable2], normalize=normalize, margins=margins)
+    
+    ptable = table.values[:-1,:-1]
+    x_labels = table.columns[:-1]
+    y_labels = table.index[:-1]
+    
+    if show_plot:
+        # Ref: https://matplotlib.org/gallery/images_contours_and_fields/image_annotated_heatmap.html
+        textcolors=["black", "white"]
+        fig, ax = plt.subplots(figsize=(10,10))
+        im = ax.imshow(ptable, cmap='Blues')
+        fig.colorbar(im, ax=ax)
+
+        threshold = ptable.max()/2.
+        
+        for i in range(len(y_labels)):
+            for j in range(len(x_labels)):
+                text = ax.text(j, i, ptable[i, j],
+                               ha="center", va="center", color=textcolors[int(ptable[i, j] > threshold)])
+                
+        ax.set_xticks(range(len(x_labels)))
+        ax.set_yticks(range(len(y_labels)))
+        ax.set_xticklabels(x_labels, rotation=45)
+        ax.set_yticklabels(y_labels)
+        ax.set_xlabel(variable2)
+        ax.set_ylabel(variable1)
+
+        #fig.tight_layout()
+        
+    return table  
 
 def category_lists(DataFrame, categorical_variables, threshold=50, return_type='json'):
     """
@@ -223,7 +265,7 @@ def variable_response(DataFrame, variable, target_variable, measurement_variable
             print('Filtering with {} failed'.format(condition))
     
     ResponseTable = DataFrame.groupby(by=X)[[y0,y]].agg({y0:'sum',y:'sum'}).astype('int64')
-    DataFrame.drop(columns=[count_flag])
+    DataFrame = DataFrame.drop(columns=[count_flag])
     
     ResponseTable['CountsFraction%'] = ResponseTable[y0]/ResponseTable[y0].sum() * 100
     ResponseTable['ResponseFraction%'] = ResponseTable[y]/ResponseTable[y].sum() * 100

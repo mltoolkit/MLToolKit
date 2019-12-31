@@ -12,19 +12,6 @@ focused projects. It is compatible with and interoperate with popular data
 analysis, manipulation and machine learning libraries Pandas, Sci-kit Learn, 
 Tensorflow, Statmodels, Catboost, XGboost, etc.
 
-Main Features
--------------
-- Data Extraction (SQL, Flatfiles, etc.)
-- Exploratory data analysis (statistical summary, univariate analysis, etc.)
-- Feature Extraction and Engineering
-- Model performance analysis and comparison between models
-- Cross Validation and Hyper parameter tuning
-- JSON input script for executing model building and scoring tasks.
-- Model Building UI
-- Auto ML (automated machine learning)
-- Model Deploymet and Serving via RESTful  API
-
-
 Author
 ------
 - Sumudu Tennakoon
