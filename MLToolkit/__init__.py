@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
-# MLToolkit (mltoolkit)
+# MLToolkit (mltk)
 
 __docformat__ = 'restructuredtext'
-__name__="MLToolkit"
+__name__="mltk"
+__distname__="pymltoolkit"
 __version__="0.1.2"
+__description__= 'Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
+__url__="https://github.com/sptennak/MLToolkit"
 __create_date__="Sun Jul 01 2018"
 __last_update__="Sun Jun 22 2018"
 __license__="""
@@ -27,11 +30,20 @@ Main Features
 - Model performance analysis and comparison between models
 - Hyper parameter tuning
 - Auto ML (automated machine learning)
+- Serving models via RESTful  API
+
+Author
+------
+- Sumudu Tennakoon
 
 Links
 -----
 Website: http://sumudu.tennakoon.net/projects/MLToolkit
 Github: https://github.com/sptennak/MLToolkit
+
+License
+-------
+Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
 
 hard_dependencies = ('numpy', 'scipy', 'matplotlib', 'pandas','sklearn', 'statsmodels','re') #'tensorflow'
@@ -62,12 +74,13 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Package scripts
-from MLToolkit.etl import *
-from MLToolkit.explore import *
-from MLToolkit.model import *
-from MLToolkit.matrics import *
+from mltk.etl import *
+from mltk.explore import *
+from mltk.model import *
+from mltk.matrics import *
+from mltk.deploy import *
 
-print('MLToolkit=={}'.format(__version__.strip()))
+print('mltk=={}'.format(__version__.strip()))
 ###############################################################################
 #                           SET DISPLAY ENVIRONMENT                           #
 ###############################################################################
