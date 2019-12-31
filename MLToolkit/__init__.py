@@ -4,18 +4,18 @@
 __docformat__ = 'restructuredtext'
 __name__="mltk"
 __distname__="pymltoolkit"
-__version__="0.1.9"
+__version__="0.1.10"
 __description__= 'End-to-end Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
 __url__="https://mltoolkit.github.io/MLToolKit"
 __create_date__="Sun Jul 01 2018"
-__last_update__="Sat Dec 07 2019"
+__last_update__="Tue Dec 31 2019"
 __license__="""
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
 __doc__="""
-MLToolkit - a verstile helping library for machine learning
-===========================================================
+MLToolkit - A Simplified Toolkit for Unifying End-To-End Machine Learing Projects
+===============================================================================
 'MLToolkit' is a Python package providing a set of user-friendly functions to 
 help building machine learning models in data science research or production 
 focused projects. It is compatible with and interoperate with popular data 
@@ -101,6 +101,7 @@ from mltk.modelchest import *
 from mltk.explain import *
 from mltk.image import *
 from mltk.project import *
+from mltk.datatools import *
 
 message = """
 Some functions of MLToolKit depends on number of Open Source Python Libraries such as
