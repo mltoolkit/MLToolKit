@@ -57,7 +57,7 @@ def generate_config_file():
             config = configparser.ConfigParser()    
             config['DEFAULT']['ModelFolder'] = '{model_folder}'
             config['DEFAULT']['ModelFile']='{model_file}'
-            config['DEFAULT']['ELTPyScript'] = '{ELTPyScript}'
+            config['DEFAULT']['ETLPyScript'] = '{ETLPyScript}'
             config['DEFAULT']['UploadFolder'] = '{upload_folder}'
             config['DEFAULT']['OutputFilePrefix'] = '{OutputFilePrefix}'
             config.add_section('SAMPLES')
@@ -84,7 +84,7 @@ def model_test_run(model_input_data_json=None, model_input_data_file=None):
             input_data = json.load(json_file)
         input_data_str = json.dumps(input_data)
         edges = MLModelObject.score_parameters['Edges']
-        output = mltk.score_records(input_data_str, edges, MLModelObject, ETL=ETL, return_type='json')
+        output = mltk.score_records(input_data_str, MLModelObject, edges, ETL=ETL, return_type='json')
         print('* Scoring Test JSON format: DONE')
         print('   RESULT:\n{}'.format(output))  
     except:
@@ -94,7 +94,7 @@ def model_test_run(model_input_data_json=None, model_input_data_file=None):
 
     try:
         model_input_data = pd.read_csv(model_input_data_file).head(3)
-        output = mltk.score_records(model_input_data, edges, MLModelObject, ETL=ETL, return_type='frame')
+        output = mltk.score_records(model_input_data, MLModelObject, edges, ETL=ETL, return_type='frame')
         print(' * Scoring Test CSV FILE format: DONE')
         print('   RESULT:\n{}'.format(output.transpose()))  
     except:
@@ -129,7 +129,7 @@ try:
     config.read(config_file)
     model_folder = config['DEFAULT']['ModelFolder'] 
     model_file = os.path.join(model_folder, config['DEFAULT']['ModelFile']) 
-    elt_py_script = os.path.join(model_folder, config['DEFAULT']['ELTPyScript'])
+    etl_py_script = os.path.join(model_folder, config['DEFAULT']['ETLPyScript'])
     upload_folder = config['DEFAULT']['UploadFolder'] 
     out_file_prefix = config['DEFAULT']['OutputFilePrefix']
     sample_folder = config['SAMPLES']['SampleFileFolder'] 
@@ -160,7 +160,7 @@ print('-'*80)
 # ELT FUNCTION TO PROCESS DATA FOR SCORING
 try:
     import importlib.util
-    spec = importlib.util.spec_from_file_location("etl_module",elt_py_script)
+    spec = importlib.util.spec_from_file_location("etl_module",etl_py_script)
     etl_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(etl_module)
     ETL = etl_module.ETL
@@ -231,19 +231,27 @@ def index():
 def ml_json():
     if request.method == 'POST':   
         print('POST')
+        try:
+            model_to_run = request.form['Model'] 
+        except:
+            pass # Choice of models not implemented
         model_input_data = request.form['InputData']           
         edges = MLModelObject.score_parameters['Edges']
-        output = mltk.score_records(model_input_data, edges, MLModelObject, ETL=ETL, return_type='json')
+        output = mltk.score_records(model_input_data, MLModelObject, edges, ETL=ETL, return_type='json')
         return send_response(output)
     if request.method == 'GET': 
         print('GET')
+        try:
+            model_to_run = request.args.get('Model') 
+        except:
+            pass # Choice of models not implemented
         model_input_data = request.args.get('InputData') 
         edges = MLModelObject.score_parameters['Edges']
-        output = mltk.score_records(model_input_data, edges, MLModelObject, ETL=ETL, return_type='json')
+        output = mltk.score_records(model_input_data, MLModelObject, edges, ETL=ETL, return_type='json')
         return send_response(output)
     return '400: Bad request. Please check your request format.'
 
-@app.route('/ml_api_file', methods=['GET', 'POST'])
+@app.route('/ml_api_file', methods=['GET','POST'])
 def ml_file():
     if request.method == 'POST':
         print('POST')
@@ -251,6 +259,11 @@ def ml_file():
         if 'file' not in request.files:
             flash('No file part')
             return '204: No file part'
+        try:
+           model_to_run = request.form['Model'] 
+        except:
+            pass # Choice of models not implemented
+            
         file = request.files['file']
         print(file.filename)
         # if user does not select file, browser also
@@ -266,7 +279,7 @@ def ml_file():
 
             model_input_data = pd.read_csv(file_path)            
             edges = MLModelObject.score_parameters['Edges']
-            output = mltk.score_records(model_input_data, edges, MLModelObject, ETL=ETL, return_type='frame')
+            output = mltk.score_records(model_input_data, MLModelObject, edges, ETL=ETL, return_type='frame')
             os.remove(file_path)
             #print(output)
 #            stream = io.StringIO()
@@ -287,11 +300,16 @@ def ml_file():
 
     return '400: Bad request. Please check your request format.'
 
-@app.route('/input_form', methods=['GET', 'POST'])
+@app.route('/input_form', methods=['GET','POST'])
 def input_form():   
     if request.method == 'POST':   
         print('POST')
-
+        
+        try:
+            model_to_run = request.form['Model'] 
+        except:
+            pass # Choice of models not implemented
+            
         if request.form['form']=='json':
             model_input_data = request.form['json']            
         elif request.form['form']=='file':
@@ -317,12 +335,13 @@ def input_form():
         score_variable = MLModelObject.get_score_variable()
         
         if request.form['form']=='file':            
-            output = mltk.score_records(model_input_data, edges, MLModelObject, ETL=ETL, return_type='frame')
+            output = mltk.score_records(model_input_data, MLModelObject, edges, ETL=ETL, return_type='frame')
         else:
-            output = mltk.score_records(model_input_data, edges, MLModelObject, ETL=ETL, return_type='dict')
+            output = mltk.score_records(model_input_data, MLModelObject, edges, ETL=ETL, return_type='dict')
             
         if request.form['form']=='json':
-            index_value = list(output.keys())[0]
+            #index_value = list(output.keys())[0]
+            index_value = 0
             InputFileName = ''
             ResultsFileName = ''
             Actual = ''
@@ -330,7 +349,7 @@ def input_form():
             PredictionProbability = np.round(output[index_value][score_variable],3)
             JSONOutput = json.dumps(output, indent=4, cls=custom_json_encoder)
         elif request.form['form']=='file':
-            index_value = None
+            #index_value = None
             InputFileName = file_name
             ResultsFileName = 'output_{}.csv'.format(str(uuid.uuid4()))
             output.to_csv(os.path.join(static_folder,ResultsFileName), index=False, quoting=csv.QUOTE_ALL)
@@ -353,7 +372,7 @@ def input_form():
 def init():
     global MLModelObject
     # LOAD PRE-TRAINED MODEL
-    MLModelObject = mltk.load_object(ModelFile)
+    MLModelObject = mltk.load_model(ModelFile)
     model_test_run(model_input_data_json, model_input_data_file)
        
 ###############################################################################
@@ -366,6 +385,6 @@ if __name__ == "__main__":
     app.config['JSON_SORT_KEYS'] = False
     print((" * Loading ML Model and sttrating Flask API server. Please wait few momments to  until the server is fully started."))
     init()
-    app.run(host=host_address, port=port, threaded=True, debug = False)
+    app.run(host=host_address, port=port, threaded=True, debug=False)
 ###############################################################################
 

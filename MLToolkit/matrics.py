@@ -69,9 +69,9 @@ def plot_model_results(ResultsTable, x_column, y_column, size_column, color_colu
     
 ###############################################################################
 # ROBUSTNESS TABLE                 
-def robustness_table(ResultsSet, class_variable='Response', score_variable='Probability',  score_label='Score', show_plot=False):  
+def robustness_table(ResultsSet, target_variable='Response', score_variable='Probability',  score_label='Score', show_plot=False):  
 
-    RobustnessTable = ResultsSet.groupby(by=[score_label]).agg({score_variable:[min,max,'mean','count'], class_variable:sum})        
+    RobustnessTable = ResultsSet.groupby(by=[score_label]).agg({score_variable:[min,max,'mean','count'], target_variable:sum})        
     
     RobustnessTable.columns=np.array(['min{}'.format(score_variable), 'max{}'.format(score_variable), 'mean{}'.format(score_variable), 'BucketCount', 'ResponseCount'])
     
@@ -104,24 +104,26 @@ def robustness_table(ResultsSet, class_variable='Response', score_variable='Prob
     
     if show_plot==True:
         plot_model_results(RobustnessTable[RobustnessTable.index!='DataSet'], x_column='mean{}'.format(score_variable), y_column='BucketPrecision', size_column='ResponseFraction', color_column='BucketFraction', color_scale=100, size_scale=2000)
-                
+           
+    RobustnessTable[['BucketCount','ResponseCount']] = RobustnessTable[['BucketCount','ResponseCount']].astype('int')
+    
     return RobustnessTable
 
 ###############################################################################
 # COMPUTE MODEL PERFORMANCE EVALUATION MATRICS                  
-def model_performance_matrics(ResultsSet, class_variable='Actual', score_variable='Probability', quantile_label='Quantile',  quantiles=1000, show_plot=False):
+def model_performance_matrics(ResultsSet, target_variable='Actual', score_variable='Probability', quantile_label='Quantile',  quantiles=1000, show_plot=False):
     from sklearn import metrics #roc_curve, auc, precision_recall_curve,balanced_accuracy_score
 
     # Create quantiles
     ResultsSet[quantile_label] = pd.qcut(x=ResultsSet[score_variable], q=quantiles, labels = False, duplicates='drop')
     ResultsSet[quantile_label] = ResultsSet[quantile_label] + 1
     
-    RobustnessTable = robustness_table(ResultsSet, class_variable=class_variable, score_variable=score_variable, score_label=quantile_label, show_plot=show_plot)    
+    RobustnessTable = robustness_table(ResultsSet, target_variable=target_variable, score_variable=score_variable, score_label=quantile_label, show_plot=show_plot)    
     #RobustnessTable[:-1].plot(x='maxProbability', y=['CumulativePrecision', 'CumulativeBucketFraction', 'CumulativeResponseFraction'], xlim=[0.0, 1.0], ylim=[0.0, 1.05])
     #RobustnessTable[:-1].plot(x='meanProbability', y=['BucketPrecision'], xlim=[0.0, 1.0], ylim=[0.0, 1.05])
     
     ROCCurve = {}  
-    ROCCurve['FPR'], ROCCurve['TPR'], ROCCurve['Threshold'] = metrics.roc_curve(ResultsSet[class_variable].values, ResultsSet[score_variable].values)
+    ROCCurve['FPR'], ROCCurve['TPR'], ROCCurve['Threshold'] = metrics.roc_curve(ResultsSet[target_variable].values, ResultsSet[score_variable].values)
     AUC = metrics.auc( ROCCurve['FPR'], ROCCurve['TPR'])
     ROCCurve = pd.DataFrame(data=ROCCurve)
     
@@ -133,7 +135,7 @@ def model_performance_matrics(ResultsSet, class_variable='Actual', score_variabl
         ROCCurve = a.append(b).append(c).reset_index(drop=True)
 
     PrecisionRecallCurve = {}  
-    PrecisionRecallCurve['Precision'], PrecisionRecallCurve['Recall'], PrecisionRecallCurve['Threshold'] = metrics.precision_recall_curve(ResultsSet[class_variable].values, ResultsSet[score_variable].values)
+    PrecisionRecallCurve['Precision'], PrecisionRecallCurve['Recall'], PrecisionRecallCurve['Threshold'] = metrics.precision_recall_curve(ResultsSet[target_variable].values, ResultsSet[score_variable].values)
     PrecisionRecallCurve['Threshold']=np.insert(PrecisionRecallCurve['Threshold'], 0,0)    
     PrecisionRecallCurve = pd.DataFrame(data=PrecisionRecallCurve)
     
@@ -232,18 +234,36 @@ def plot_eval_matrics(RobustnessTable, ROCCurve, PrecisionRecallCurve, AUC, scor
     plt.subplots_adjust(hspace=0.4)
 #    plt.show()
 
-def confusion_matrix(actual_variable, predcted_variable, labels=None, sample_weight=None, totals=False):
+def confusion_matrix(DataFrame, actual_variable, predcted_variable, labels=None, sample_weight=None, totals=False):
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    actual_variable : str
+    predcted_variable : str
+    labels : list, default None    
+    sample_weight : str, default None
+        Column with sample weights
+    totals : bool, default False
+        includes the total row if True
+
+    Returns
+    -------
+    CF : pandas.DataFrame
+    """
+    
     from sklearn.metrics import confusion_matrix
-    CF = confusion_matrix(actual_variable, predcted_variable, labels=labels)
+    CF = confusion_matrix(DataFrame[actual_variable], DataFrame[predcted_variable], labels=labels)
     CF = pd.DataFrame(data=CF)
     
     if labels==None:
-        labels=actual_variable.unique()
+        labels=DataFrame[actual_variable].unique()
         
     if totals==True:
         CF[2] = CF.sum(axis=1)
         CF.loc[2] = CF.sum(axis=0)  
-        totals_label= [['Total'], ['']]
+        totals_label= [['TOTAL'], ['']]
     else:
         totals_label= [[],[]]
 
@@ -257,7 +277,7 @@ def confusion_matrix(actual_variable, predcted_variable, labels=None, sample_wei
     return CF
 	
 def confusion_matrix_to_row(CF, ModelID='M'):     
-    if CF.columns.values[-1][0]=='Total':        
+    if CF.columns.values[-1][0]=='TOTAL':        
         labels= CF.columns.levels[1].values[:-1]
         CF= CF.values[:-1,:-1]
     else:

@@ -54,22 +54,25 @@ from mltk.matrics import *
 from mltk.deploy import *
 
 class MLModel():
-    def __init__(self, model_attributes, model_parameters, sample_attributes, model_variables, class_variable, score_parameters, model_interpretation, model_evaluation, model_object=None):
+    def __init__(self, model_attributes, model_parameters, sample_attributes, model_variables, target_variable, score_parameters, model_interpretation, model_evaluation, model_object=None):
         self.model_attributes = model_attributes
         self.model_parameters = model_parameters
         self.sample_attributes=sample_attributes
         self.model_variables = model_variables
-        self.class_variable = class_variable
+        self.target_variable = target_variable
         self.score_parameters = score_parameters
         self.model_interpretation=model_interpretation
         self.model_evaluation = model_evaluation
         self.model_object = model_object
+    
+    def set_model_object(self, model_object):
+        self.model_object = model_object     
         
     def get_identifier_variables(self):
         return self.sample_attributes['RecordIdentifiers']
         
-    def get_class_variable(self):
-        return self.class_variable
+    def get_target_variable(self):
+        return self.target_variable
     
     def get_model_variables(self):
         return self.model_variables
@@ -100,7 +103,10 @@ class MLModel():
     
     def get_auc(self):
         return self.model_evaluation['AUC']
-
+    
+    def set_score_edges(self, edges):
+        self.score_parameters['Edges']=edges
+ 
     def get_model_manifest(self, save=False, save_path=''):       
         import json
         model_manifest= {'model_attributes':self.model_attributes,
@@ -207,6 +213,11 @@ class MLModel():
 
         plt.subplots_adjust(hspace=0.4)
         #plt.show()
+
+def load_tensorflow_model(file_path):
+    from tensorflow import keras 
+    model = keras.models.load_model(file_path)
+    return model
         
 def load_object(file_name):
     import pickle
@@ -222,8 +233,44 @@ def save_object(object_to_save, file_name):
     print('Saving model to file {}'.format(file_name))
     pickle.dump(object_to_save, pickle_out)
     pickle_out.close()
+
+def save_model(Model, file_path):
+    """
+    Parameters
+    ----------
+    Model : mltk.MLModel
+        MLModel Object
+    file_path : str, dafault ''
+        Path to file including the file name.    
+    
+    Returns
+    -------
+    None
+    """
+    if Model.model_parameters['MLAlgorithm']=='NN':
+        Model.model_object.save(os.path.splitext(file_path)[0]+'.tfh5')
+        Model.set_model_object(None)       
+    save_object(Model, file_path)
+
+def load_model(file_path):
+    """
+    Parameters
+    ----------
+    file_path : str, dafault ''
+        Path to file including the file name.    
+    
+    Returns
+    -------
+    Model : mltk.MLModel
+        MLModel Object
+    """
+    Model = load_object(file_path)
+    if Model.model_parameters['MLAlgorithm']=='NN':
+        model = load_tensorflow_model(os.path.splitext(file_path)[0]+'.tfh5')
+        Model.set_model_object(model)
+    return Model
 	
-def build_logit_model(x_train, y_train, model_variables, class_variable, model_parameters):
+def build_logit_model(x_train, y_train, model_variables, target_variable, model_parameters):
     import statsmodels as sm
     import statsmodels.discrete.discrete_model as sm
     import statsmodels.api as smapi
@@ -239,7 +286,102 @@ def build_logit_model(x_train, y_train, model_variables, class_variable, model_p
         
     return model, output, model_fit_time
 
-def build_rf_model(x_train, y_train, model_variables, class_variable, model_parameters):
+def stack_tf_layers_sequential(architecture, print_summary=False):
+    """
+    Parameters
+    ----------
+    architecture : dict
+        list of layers
+    print_summary : bool, default False
+        prints model summary if True
+        
+    Returns
+    -------
+    model : keras.engine.sequential.Sequential
+        Keras Sequential model object
+    """
+    
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import Dense, Dropout, Conv2D, MaxPooling2D, MaxPooling1D, Flatten
+    
+    model = Sequential()
+    
+    for key, layer in architecture.items():
+        if layer['type']=='Dense':
+            if layer['position']=='input':
+                model.add(Dense(units=layer['units'], activation=layer['activation'], input_shape=layer['input_shape']))
+            elif layer['position']=='hidden':
+                model.add(Dense(units=layer['units'], activation=layer['activation']))
+            elif layer['position']=='output':
+                model.add(Dense(units=layer['units'], activation=layer['activation'])) #, output_shape=layer['output_shape']
+        elif layer['type']=='Dropout': 
+             model.add(Dropout(rate=layer['rate']))   
+        elif layer['type']=='Conv2D':
+            if layer['position']=='input':
+                model.add(Conv2D(filters=layer['filters'], kernel_size=layer['kernel_size'], strides=layer['strides'], padding=layer['padding'], data_format='channels_last', activation=layer['activation'], input_shape=layer['input_shape'])) #, strides=(2, 2)
+            elif layer['position']=='hidden':
+                model.add(Conv2D(filters=layer['filters'], kernel_size=layer['kernel_size'], strides=layer['strides'], padding=layer['padding'], data_format='channels_last', activation=layer['activation'])) #, strides=(2, 2)
+        elif layer['type']=='MaxPooling2D':
+                model.add(MaxPooling2D(pool_size=layer['pool_size'], strides=None, padding=layer['padding'], data_format='channels_last'))
+        elif layer['type']=='MaxPooling1D':
+                model.add(MaxPooling1D(pool_size=layer['pool_size'], strides=None, padding=layer['padding'], data_format='channels_last'))
+        elif layer['type']=='Flatten':
+                model.add(Flatten())
+    
+    if print_summary:
+        model.summary()
+                
+    return model
+    
+def build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters):
+    import tensorflow as tf
+    import tensorflow.keras as keras
+    #from tensorflow.keras.models import Sequential
+    #from tensorflow.keras.layers import Dense, Dropout
+
+    #tf.enable_eager_execution()
+    
+    batch_size = model_parameters['BatchSize']
+    #input_shape = model_parameters['InputShape']
+    epochs = model_parameters['Epochs']   
+    metrics = model_parameters['metrics']    
+    num_classes = model_parameters['num_classes']      
+    architecture = model_parameters['architecture']
+    
+    y_train = keras.utils.to_categorical(y_train, num_classes)
+    y_validate = keras.utils.to_categorical(y_validate, num_classes)
+    
+    ###########################################################################    
+    model = stack_tf_layers_sequential(architecture)
+    model.summary()  
+    ###########################################################################
+    
+    model.compile(loss=keras.losses.categorical_crossentropy,
+                  optimizer=keras.optimizers.Adadelta(), #keras.optimizers.RMSprop(),
+                  metrics=metrics) #['accuracy']
+
+    # Create Tensorflow Session
+    sess = tf.Session(config=tf.ConfigProto(intra_op_parallelism_threads=0, inter_op_parallelism_threads=0, log_device_placement=True)) #device_count={'GPU': 0}, 
+    keras.backend.set_session(sess)
+    
+    startTime = timer()
+    hist = model.fit(x_train, y_train,
+                        batch_size=batch_size,
+                        epochs=epochs,
+                        verbose=1,
+                        validation_data=(x_validate, y_validate))
+    model_fit_time = timer() - startTime
+    
+    output = pd.DataFrame(data = hist.history)
+    
+    score = model.evaluate(x_validate, y_validate, verbose=1)
+    print('Test loss:', score[0])
+    print('Test accuracy:', score[1])
+       
+    return model, output, model_fit_time
+    
+    
+def build_rf_model(x_train, y_train, model_variables, target_variable, model_parameters):
     from sklearn.ensemble import RandomForestClassifier
     
     NTrees = model_parameters['NTrees']
@@ -259,37 +401,64 @@ def build_rf_model(x_train, y_train, model_variables, class_variable, model_para
     return model, output, model_fit_time
 
 
-def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, class_variable, 
+def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, target_variable, 
                  model_attributes, sample_attributes, model_parameters, score_parameters,
                    return_model_object=False, show_results=False, show_plot=False):
-
+    """
+    Parameters
+    ----------
+    TrainDataset : pandas.DataFrame
+    ValidateDataset : pandas.DataFrame
+    TestDataset : pandas.DataFrame
+    model_variables : dict
+    target_variable : dict 
+    model_attributes : dict
+    sample_attributes : dict
+    model_parameters : dict
+    score_parameters : dict
+    return_model_object : bool, default False
+    show_results : bool, default False
+    show_plot : bool, default False
+    
+    Returns
+    -------
+    Model : mltk.MLModel
+        MLModel Object
+    """
+    ###############################################################################
+    # Create deep copies of each dictionary
+    model_variables = copy.deepcopy(model_variables)
+    target_variable = copy.deepcopy(target_variable)
+    model_attributes = copy.deepcopy(model_attributes)
+    sample_attributes = copy.deepcopy(sample_attributes)
+    model_parameters = copy.deepcopy(model_parameters)
+    score_parameters = copy.deepcopy(score_parameters)
     ###############################################################################
     # TRAIN DATASET
     x_train = TrainDataset[model_variables].values
     print('Train samples: {} loded...'.format(x_train.shape[0]))
 
-    y_train = TrainDataset[class_variable].values
+    y_train = TrainDataset[target_variable].values
     y_train_act = y_train
     ###############################################################################
     # VALIDATE DATASET
     x_validate = ValidateDataset[model_variables].values
     print('Validate samples: {} loded...'.format(x_validate.shape[0]))
 
-    y_validate = ValidateDataset[class_variable].values
+    y_validate = ValidateDataset[target_variable].values
     y_validate_act = y_validate
     ###############################################################################
     # TEST DATASET
     x_test = TestDataset[model_variables].values
     print('Test samples: {} loded...'.format(x_test.shape[0]))
 
-    y_test = TestDataset[class_variable].values
+    y_test = TestDataset[target_variable].values
     y_test_act = y_test
     ###############################################################################
     
     model_interpretation={}
 
     model_evaluation={}
-
     
     # ModelAttributes 
     model_attributes['BuiltTime'] = datetime.now().strftime('%Y%m%d%H%M%S')
@@ -303,9 +472,9 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     sample_attributes['TestSize'] = len(TestDataset.index)
 	#
     sample_attributes['TrainValidateTestRatio'] = '{}'.format(np.round(np.array([sample_attributes['TrainSize'],sample_attributes['ValidateSize'],sample_attributes['TestSize']])/(sample_attributes['TrainSize']+sample_attributes['ValidateSize']+sample_attributes['TestSize']),2))
-    sample_attributes['TrainResponseRate'] = len(TrainDataset.loc[TrainDataset[class_variable]==1].index)/sample_attributes['TrainSize'] 
-    sample_attributes['ValidateResponseRate'] = len(ValidateDataset.loc[ValidateDataset[class_variable]==1].index)/sample_attributes['ValidateSize']
-    sample_attributes['TestResponseRate'] = len(TestDataset.loc[TestDataset[class_variable]==1].index)/sample_attributes['TestSize'] 
+    sample_attributes['TrainResponseRate'] = len(TrainDataset.loc[TrainDataset[target_variable]==1].index)/sample_attributes['TrainSize'] 
+    sample_attributes['ValidateResponseRate'] = len(ValidateDataset.loc[ValidateDataset[target_variable]==1].index)/sample_attributes['ValidateSize']
+    sample_attributes['TestResponseRate'] = len(TestDataset.loc[TestDataset[target_variable]==1].index)/sample_attributes['TestSize'] 
 
     # ScoreParameters
     edges = score_parameters['Edges']
@@ -328,7 +497,7 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
         import statsmodels
         model_attributes['MLTool'] = 'statsmodels={}'.format(statsmodels.__version__) 
         # Logit Model
-        model, summary, model_fit_time = build_logit_model(x_train, y_train, model_variables, class_variable, model_parameters)
+        model, summary, model_fit_time = build_logit_model(x_train, y_train, model_variables, target_variable, model_parameters)
         model_interpretation['ModelSummary'] = summary    
 
 #        y_pred_prob = model.predict(x_validate)
@@ -343,7 +512,7 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
         import sklearn
         model_attributes['MLTool'] = 'sklearn={}'.format(sklearn.__version__) 
         # Random Forest Model
-        model, summary, model_fit_time= build_rf_model(x_train, y_train, model_variables, class_variable, model_parameters)
+        model, summary, model_fit_time= build_rf_model(x_train, y_train, model_variables, target_variable, model_parameters)
         model_interpretation['ModelSummary'] = summary  
         
 #        y_pred_prob = model.predict(x_validate)
@@ -353,34 +522,87 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
         TestDataset[score_variable]=y_pred_prob
         ###############################################################################
         
+    elif ml_algorithm=='NN':
+        ###############################################################################
+        import tensorflow
+        import tensorflow.keras
+        model_attributes['MLTool'] = 'tensorflow={}; keras={}'.format(tensorflow.__version__, tensorflow.keras.__version__) 
+        # Deep Feed Forward Model using TensorFlow
+        model, summary, model_fit_time= build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters)
+        model_interpretation['ModelSummary'] = summary  
+        
+#        y_pred_prob = model.predict(x_validate)
+#        ValidateDataset[score_variable]=y_pred_prob
+        
+        y_pred_prob = model.predict(x_test, verbose=1, batch_size=model_parameters['BatchSize'])[:,1]
+        TestDataset[score_variable]=y_pred_prob
+        ###############################################################################     
+    else:
+        raise Exception('No ML Algorithm is given!')
+        
     ############################################################################### 
-    model_evaluation['RobustnessTable'], model_evaluation['ROCCurve'], model_evaluation['PrecisionRecallCurve'], model_evaluation['AUC'] = model_performance_matrics(TestDataset, class_variable=class_variable, score_variable=score_variable, quantile_label=quantile_label,  quantiles=quantiles, show_plot=show_plot)        
+    model_evaluation['RobustnessTable'], model_evaluation['ROCCurve'], model_evaluation['PrecisionRecallCurve'], model_evaluation['AUC'] = model_performance_matrics(TestDataset, target_variable=target_variable, score_variable=score_variable, quantile_label=quantile_label,  quantiles=quantiles, show_plot=show_plot)        
     if show_results:
         print(model_evaluation['RobustnessTable'])
     ###############################################################################
     
     ###############################################################################
     if return_model_object:
-        Model = MLModel(model_attributes, model_parameters, sample_attributes, model_variables, class_variable, 
+        Model = MLModel(model_attributes, model_parameters, sample_attributes, model_variables, target_variable, 
                         score_parameters, model_interpretation, model_evaluation, model_object=model)
     else:
-        Model = MLModel(model_attributes, model_parameters, sample_attributes, model_variables, class_variable, 
+        Model = MLModel(model_attributes, model_parameters, sample_attributes, model_variables, target_variable, 
                         score_parameters, model_interpretation, model_evaluation, model_object=None)
     ###############################################################################   
     # Cleanup memeory
     gc.collect()
     
-    return copy.deepcopy(Model)
+    #return copy.deepcopy(Model)
+    return Model
 	
-def confusion_matrix_comparison(Dataset, Models, score_variable, threshold=0.5):
+def confusion_matrix_comparison(DataFrame, Models, thresholds=0.5, score_variable=None, save_prediction=False, show_plot=False):
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    Models : 
+    thresholds : int or list(int), default 0.5    
+    score_variable : str, optional, dafault None
+        Name of the variable where the score is based on.  If None, score variabel is assigned by the model      
+    save_prediction: bool, default False
+        Retains prediction in column named by Model ID
+    show_plot : bool, default False
+        plot results if True
+
+    Returns
+    -------
+    ConfusionMatrixComparison : pandas.DataFrame
+    """
+    try:
+        if len(thresholds)>0:
+            thresholds = thresholds        
+    except:
+        thresholds = [thresholds]
+        
     ConfusionMatrixComparison=pd.DataFrame()
+    
     for i in range(len(Models)):
         Model = Models[i]
-        threshold = threshold
-        model_id = Model.get_model_id()+'_{}'.format(threshold)
-        Dataset=score_dataset(Dataset, Model, edges=None, score_label=None, fill_missing=0)
-        Dataset['Predicted'] = np.where(Dataset[Model.get_score_variable()]>threshold,1,0)
-        ConfusionMatrix=confusion_matrix(actual_variable=Dataset[Model.get_class_variable()], predcted_variable=Dataset['Predicted'], labels=[0,1], sample_weight=None, totals=True)
-        ConfusionMatrixComparison=ConfusionMatrixComparison.append(confusion_matrix_to_row(ConfusionMatrix, ModelID=model_id),ignore_index=True)   
-    ConfusionMatrixComparison.style.background_gradient(cmap='coolwarm').set_precision(3)
+        DataFrame=score_processed_dataset(DataFrame, Model, edges=None, score_label=score_variable, fill_missing=0)
+        for threshold in thresholds:            
+            model_id = Model.get_model_id()+'_[TH={}]'.format(threshold)    
+            target_variable = Model.get_target_variable()
+            predict_column = 'Predict'
+            DataFrame[predict_column] = np.where(DataFrame[Model.get_score_variable()]>threshold,1,0)
+            ConfusionMatrix=confusion_matrix(DataFrame, actual_variable=target_variable, predcted_variable=predict_column, labels=[0,1], sample_weight=None, totals=True)
+            ConfusionMatrixComparison=ConfusionMatrixComparison.append(confusion_matrix_to_row(ConfusionMatrix, ModelID=model_id),ignore_index=True) 
+            if save_prediction:
+                pass
+            else:
+                DataFrame.drop(columns=[predict_column], inplace=True)
+                
+    if show_plot:
+        ConfusionMatrixComparison[['PPV', 'TPR', 'ACC', 'F1']].plot(kind='bar', subplots=True, figsize=(5,10), legend=False)
+    
     return ConfusionMatrixComparison

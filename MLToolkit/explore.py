@@ -129,26 +129,75 @@ def histogram(DataFrame, column, n_bins=10, bin_range=None, orientation='vertica
     
     return Table
 
-def category_lists(DataFrame, categorical_variables):
-    out = ''
+def category_lists(DataFrame, categorical_variables, threshold=50, return_type='json'):
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    categorical_variables : list(str)
+        Variable to examine the freqeuncy.    
+    threshold : int, default 50
+        Maximum number of categories expected
+    return_type : {'json', 'dict'}, default 'json'
+    
+    Returns
+    -------
+    out : JSON str or dict
+    """
+    out = dict()
     for variable in categorical_variables:
-        out = out + '{}:{}\n\n'.format(variable, tuple(DataFrame[variable].unique()))
+        categories = DataFrame[variable].unique()
+        if len(categories)>threshold:
+            out[variable] = []
+            print('Numebr of ategories > {}'.format(threshold))
+        else:
+            out[variable] = list(categories)
+    
+    if return_type=='json':
+        import json 
+        out = json.dumps(out, indent = 4)
+        
     return out
 	
-def variable_frequency(DataFrame, variable):   
+def variable_frequency(DataFrame, variable, sorted=False, ascending=False, show_plot=False): 
+    """
+    Parameters
+    ----------
+    DataFrame : pandas.DataFrame
+        DataFrame
+    variable : str
+        Variable to examine the freqeuncy.    
+    sorted : bool, default False
+    ascending : bool, default False    
+    show_plot : bool, default False
+        plot results if True
+
+    Returns
+    -------
+    FrequencyTable : pandas.DataFrame
+    """
     x = variable
     FrequencyTable = DataFrame.groupby(by=x)[[x]].count().astype('int')
     FrequencyTable['CountsFraction%'] = FrequencyTable[x]/FrequencyTable[x].sum() * 100
-    total_row = [FrequencyTable[x].sum(), FrequencyTable['CountsFraction%'].sum()]
+    FrequencyTable.rename(index=str, columns={x:'Counts'}, inplace=True)
+    if sorted:
+        FrequencyTable.sort_values(by=['Counts'], ascending=ascending, inplace =True)
+        
+    total_row = [FrequencyTable['Counts'].sum(), FrequencyTable['CountsFraction%'].sum()]
     TotalRow = pd.DataFrame(data=[total_row], columns=FrequencyTable.columns, index=np.array(['TOTAL']))
     TotalRow.index.name = FrequencyTable.index.name
     FrequencyTable = FrequencyTable.append(TotalRow, ignore_index=False)    
-    FrequencyTable.rename(index=str, columns={x:'Counts'}, inplace=True)    
+        
+    
+    if show_plot:
+        FrequencyTable.loc[FrequencyTable.index!='TOTAL'][['Counts']].plot(kind='bar')
+        
     return FrequencyTable
 
-def variable_response(DataFrame, variable, class_variable):   
+def variable_response(DataFrame, variable, target_variable, show_plot=False):   
     X = variable
-    y = class_variable
+    y = target_variable
     ResponseTable = DataFrame.groupby(by=X)[[X,y]].agg({X:'count',y:'sum'}).astype('int')
     ResponseTable['CountsFraction%'] = ResponseTable[X]/ResponseTable[X].sum() * 100
     ResponseTable['ResponseFraction%'] = ResponseTable[y]/ResponseTable[y].sum() * 100
@@ -165,11 +214,34 @@ def variable_response(DataFrame, variable, class_variable):
     ResponseTable = ResponseTable.append(TotalRow, ignore_index=False)
     
     ResponseTable.rename(index=str, columns={X:'Counts'}, inplace=True)
+    
+    if show_plot:
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+        ResponseTable.loc[ResponseTable.index!='TOTAL'][['Counts']].plot(ax=ax1, kind='bar')
+        ResponseTable.loc[ResponseTable.index!='TOTAL'][['ResponseRate%']].plot(ax=ax2, kind='line', style='r-o')
+        ResponseTable.loc[ResponseTable.index!='TOTAL'][['ResponseFraction%']].plot(ax=ax2, kind='line', style='k-o')
+        ax1.set_ylabel('Counts')
+        ax2.set_ylabel('ResponseRate, ResponseFraction %')
+        plt.title(y)
+        line1, label1 = ax1.get_legend_handles_labels()
+        line2, label2 = ax2.get_legend_handles_labels()
+        ax1.legend().set_visible(False)
+        ax2.legend().set_visible(False)
+        plt.legend(line1+line2, label1+label2)
+    
     return ResponseTable
 
-def plot_variable_response(DataFrame, variable, class_variable):
+def variable_responses(DataFrame, variables, target_variable, show_output=True, show_plot=False):
+    y = target_variable
+    for X in variables:
+        output = variable_response(DataFrame, variable=X, target_variable=y, show_plot=show_plot)
+        if show_output:
+            print(output)
+            
+def plot_variable_response(DataFrame, variable, target_variable):
     X = variable
-    y = class_variable   
+    y = target_variable   
     ResponseTable = variable_response(DataFrame, X, y)
     print(ResponseTable)
     ResponseTable = ResponseTable.loc[ResponseTable.index!='TOTAL']
@@ -187,10 +259,10 @@ def plot_variable_response(DataFrame, variable, class_variable):
     ax2.legend().set_visible(False)
     plt.legend(line1+line2, label1+label2)
         
-def plot_variable_responses(DataFrame, variables, class_variable):
-    y = class_variable
+def plot_variable_responses(DataFrame, variables, target_variable):
+    y = target_variable
     for X in variables:
-        plot_variable_response(DataFrame, variable=X, class_variable=y)	
+        plot_variable_response(DataFrame, variable=X, target_variable=y)	
 
 def correlation_matrix_to_list(correlation, target_variable=None, ascending=False):
     variables=correlation.columns.values
@@ -234,12 +306,12 @@ def correlation_matrix(DataFrame, variables, target_variable=None, method='pears
         
     return correlation               
 	
-def univariate_stats(DataFrame, feature_variables, class_variable):
+def univariate_stats(DataFrame, feature_variables, target_variable):
     from sklearn.metrics import confusion_matrix
     Univariate = []
     for i in range(len(feature_variables)):
         univariate_columns = ['TN', 'FP', 'FN', 'TP']
-        Univariate.append(confusion_matrix(DataFrame[class_variable],DataFrame[feature_variables[i]], labels=[0,1]).ravel())
+        Univariate.append(confusion_matrix(DataFrame[target_variable],DataFrame[feature_variables[i]], labels=[0,1]).ravel())
     
     Univariate = pd.DataFrame(data=Univariate, index=feature_variables, columns=univariate_columns, dtype='int')
     Univariate['F1'] = 2 * Univariate['TP'] / (2*Univariate['TP'] + Univariate['FP'] + Univariate['FN'])
