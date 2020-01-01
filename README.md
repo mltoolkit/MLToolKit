@@ -902,7 +902,8 @@ limitations under the License.
   year = 2019,
   publisher = "GitHub",
   howpublished = {\url{https://mltoolkit.github.io/mltk/}},
-  version = "0.1.10"
+  version = "0.1.10",
+  doi = "https://doi.org/10.5281/zenodo.3596163"
 }
 ```
 
