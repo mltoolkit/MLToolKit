@@ -11,7 +11,7 @@ PyMLToolKit Documentation
 .. image:: https://img.shields.io/pypi/v/pymltoolkit.svg
    :target: https://pypi.org/project/pymltoolkit
    :alt: Latest PyPI version
-   
+|
 .. image:: https://raw.githubusercontent.com/mltoolkit/MLToolkit/master/MLToolkit.png
    :width: 200px
    
@@ -20,7 +20,7 @@ MLToolKit (mltk) is a Python package providing a set of user-friendly functions 
 MLToolKit supports all stages of the machine learning application development process. 
 
 .. image:: https://raw.githubusercontent.com/mltoolkit/MLToolkit/master/MLToolkit/image/MLTKProcess.png
-   :height: 100px
+   :height: 200px
 
 Project Home : https://mltoolkit.github.io/MLToolKit
 
