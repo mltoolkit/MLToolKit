@@ -68,4 +68,5 @@ Step #2
     
 memory_limit is in bytes. To convert allocated memeory to GB use : memory_limit/(1024*1024*1024)
 
+If you encounter errors in setting up TensorFlow, please refer to thw official TensorFlow Build and install error messages (https://www.tensorflow.org/install/errors)
 
