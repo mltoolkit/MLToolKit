@@ -29,16 +29,16 @@ Contents
 .. toctree::
    :maxdepth: 2
    
-   intro.rst
-   install.rst
-   etl.rst
-   explore.rst
-   model.rst
-   evaluation.rst
-   server.rst
-   demo.rst   
-   about.rst
-   releasenotes.rst
+   content/intro.rst
+   content/install.rst
+   content/etl.rst
+   content/explore.rst
+   content/model.rst
+   content/evaluation.rst
+   content/server.rst
+   content/demo.rst   
+   content/about.rst
+   content/releasenotes.rst
    
 Indices and Tables
 ==================
