@@ -1,6 +1,10 @@
 # MLToolKit Project 
-www.mltoolkit.org <br>
+
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3596163.svg)](https://doi.org/10.5281/zenodo.3596163)
+[![Documentation Status](https://readthedocs.org/projects/pymltoolkit/badge/?version=latest)](https://pymltoolkit.readthedocs.io/en/latest/?badge=latest)
+[![PyPI](https://img.shields.io/pypi/v/pymltoolkit.svg)](https://pypi.org/project/pymltoolkit)
+<br>
+www.mltoolkit.org 
 
 ## Current release: PyMLToolkit [v0.1.10]
 
