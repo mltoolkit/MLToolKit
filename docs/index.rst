@@ -30,7 +30,7 @@ Cite as
 
    @misc{mltk2019,
      author =  "Sumudu Tennakoon",
-     title = "MLToolKit(mltk): A Simplified Toolkit for Unifying End-To-End Machine Learing Projects",
+     title = "MLToolKit(mltk): A Simplified Toolkit for Unifying End-To-End Machine Learning Projects",
      year = 2019,
      publisher = "GitHub",
      howpublished = {\url{https://mltoolkit.github.io/mltk/}},
