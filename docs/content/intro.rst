@@ -27,7 +27,7 @@ Supported Machine Learning Algorithms/Packages
   * LogisticRegression: statsmodels
   * Deep Feed Forward Neural Network (DFF): tensorflow
   * Convlutional Neural Network (CNN): tensorflow
-  * Gradient Boost : catboost
+  * Gradient Boost : catboost, xgboost, lightgbm
   * Linear Regression: statsmodels
   * RandomForestRegressor: scikit-learn
   ... More models will be added in the future releases ...
