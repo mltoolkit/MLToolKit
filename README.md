@@ -3,10 +3,9 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3596163.svg)](https://doi.org/10.5281/zenodo.3596163)
 [![Documentation Status](https://readthedocs.org/projects/pymltoolkit/badge/?version=latest)](https://pymltoolkit.readthedocs.io/en/latest/?badge=latest)
 [![PyPI](https://img.shields.io/pypi/v/pymltoolkit.svg)](https://pypi.org/project/pymltoolkit)
-<br>
-www.mltoolkit.org 
+<br>www.mltoolkit.org
 
-## Current release: PyMLToolkit [v0.1.10]
+## Current release: PyMLToolkit [v0.1.11]
 
 <img src="https://raw.githubusercontent.com/mltoolkit/MLToolkit/master/MLToolkit.png" height="200">
 
@@ -27,7 +26,7 @@ pip install pymltoolkit --no-dependencies
 ```
 
 ## Functions
-- Data Extraction (SQL, Flatfiles, Images, etc.)
+- Data Extraction (SQL, Flatfiles, Binary Files, Images, etc.)
 - Exploratory Data Analysis (statistical summary, univariate analysis, visulize distributions, etc.)
 - Feature Engineering (Supports numeric, text, date/time. Image data support will integrate in later releases of v0.1)
 - Model Building (Currently supported for binary classification and regression only)
@@ -45,7 +44,7 @@ pip install pymltoolkit --no-dependencies
 - LogisticRegression: statsmodels
 - Deep Feed Forward Neural Network (DFF): tensorflow
 - Convlutional Neural Network (CNN): tensorflow
-- Gradient Boost : catboost
+- Gradient Boost : catboost, xgboost, lightgbm
 - Linear Regression: statsmodels
 - RandomForestRegressor: scikit-learn
 - ... More models will be added in the future releases ...
@@ -260,17 +259,24 @@ TrainDataset, ValidateDataset, TestDataset = mltk.train_validate_test_split(Data
 ```
 ### Model Building
 ```python
+identifierColumns = ['ID']
+modelDataStats = mltk.data_description(TrainDataset)
+
 sample_attributes = {
 						'SampleDescription':'Adult Census Income Dataset',
 						'NumClasses':2,
-						'RecordIdentifiers':identifierColumns
-                }
-
+                        'ClassLabelsMap':{'<=50K':0, '>50K':1},
+                        'DataFormat':'table',
+						'RecordIdentifiers':identifierColumns,
+                        'ModelDataStats':modelDataStats
+                }                 
+                
 score_parameters = {
 					'Edges':[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
 					'Percentiles':[0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0],
 					'Threshold':0.5,
 					'Quantiles':10,
+                    'TargetClass': '>50K',
 					'ScoreVariable':'Probability',
 					'ScoreLabel':'Score',
 					'QuantileLabel':'Quantile',
@@ -284,9 +290,11 @@ Model Attributes
 ```python
 model_attributes = {
 					'ModelID': None,
-					'ModelType':'classification',
+                    'ModelType':'classification',# 'regression'
+                    'EnumerationType': 'binary', # 'multi' 'mono' None
 					'ModelName': 'IncomeLevel',
 					'Version':'0.1',
+                    'TrainingMethod': 'supervised'                   
                 }
 ```
 			   
@@ -305,47 +313,53 @@ model_parameters = {
 					'NTrees':500,
 					'MaxDepth':100,
 					'MinSamplesToSplit':10,
-					'Processors':2
+					'Processors':2,
+                    'Verbose':True
 				} 
 ```
+
 Neural Networks
 ```python
 # Setup Architecture
-# Binary classification (L1 'units': 2), 32 variables ('input_shape':(48,))
-SimpleDFF_architecture = {
-        'L1':{'type': 'Dense', 'position':'input', 'units': 512, 'activation':'relu', 'input_shape':(48,)},
-        'L2':{'type': 'Dense', 'position':'hidden', 'units': 512, 'activation':'relu'},
-        'L3':{'type': 'Dropout', 'position':'hidden', 'rate':0.5},
-        'L4':{'type': 'Dense', 'position':'output', 'units': 2, 'activation':'softmax', 'output_shape':None},
-       }
+# Binary classification
+SimpleDFF_architecture = {'layers': [
+        {'name': 'Dense1', 'class_name': 'Dense', 'position':'input', 'config':{'units': 512, 'activation':'relu', 'input_shape':(48,)}},
+        {'name': 'Dense2', 'class_name': 'Dense', 'position':'hidden', 'config':{'units': 512, 'activation':'relu', 'kernel_regularizer':{'l1':0.01}}},
+        {'name': 'Dropout1', 'class_name': 'Dropout', 'position':'hidden', 'config':{'rate':0.5, 'noise_shape':None, 'seed':None}},
+        {'name': 'Dense3', 'class_name': 'Dense', 'position':'output',  'config':{'units': 2, 'activation':'softmax'}}
+       ]}
 
-# Binary classification (L1 'units': 2), 32 variables ('input_shape':(32,))
-LogisticRegressionNN_architecture = {
-        'L1':{'type': 'Dense', 'position':'input', 'units': 2, 'activation':'softmax', 'input_shape':(32,)},
-       }
+# Binary classification 
+LogisticRegressionNN_architecture = {'layers': [
+        {'name': 'Dense1', 'class_name': 'Dense', 'position':'input',  'config':{'units': 2, 'activation':'softmax', 'input_shape':(32,)}}
+       ]}
 
-# Binary classification (L8 'units': 2)
-SimpleImageClassifier_architecture = {
-        'L1':{'type': 'Conv2D', 'position':'input', 'filters': 32, 'kernel_size':(3,3), 'strides':(1,1), 'padding':'valid', 'activation':'relu', 'input_shape':(128, 128, 1)},
-        'L2':{'type': 'Conv2D', 'position':'hidden', 'filters': 64, 'kernel_size':(3,3), 'strides':(1,1), 'padding':'valid', 'activation':'relu'},
-        'L3':{'type': 'MaxPooling2D', 'position':'hidden', 'pool_size': (2,2), 'padding':'valid'},   
-        'L4':{'type': 'Dropout', 'position':'hidden', 'rate':0.25},
-        'L5':{'type': 'Flatten', 'position':'hidden'},        
-        'L6':{'type': 'Dense', 'position':'hidden', 'units': 128, 'activation':'relu'},
-        'L7':{'type': 'Dropout', 'position':'hidden', 'rate':0.5},
-        'L8':{'type': 'Dense', 'position':'output', 'units': 2, 'activation':'softmax', 'output_shape':None},
-       }
+# Multi Class classification 
+n_classes = 8
+SimpleImageClassifier_architecture = {'layers': [
+        {'name':'Conv2D1', 'type':'Conv2D', 'position':'input', 'config':{'filters':32, 'kernel_size':(3,3), 'strides':None, 'padding':'same', 'activation':'relu', 'input_shape':(128, 128, 1), 'data_format':'channels_last'}},
+        {'name':'MaxPooling2D1', 'type':'MaxPooling2D', 'position':'hidden', 'config':{'pool_size':(2,2), 'strides':None, 'padding':'same', 'data_format':'channels_last'}},      
+        {'name':'Conv2D2', 'type':'Conv2D', 'position':'hidden', 'config':{'filters': 64, 'kernel_size': (3,3), 'strides':None, 'padding':'same', 'activation':'relu', 'data_format':'channels_last'}},
+        {'name':'MaxPooling2D2', 'type':'MaxPooling2D', 'position':'hidden', 'config':{'pool_size':(2,2), 'strides':None, 'padding':'same', 'data_format':'channels_last'}},       
+        {'name':'Dropout1', 'type':'Dropout', 'position':'hidden', 'config':{'rate':0.5, 'noise_shape':None, 'seed':None}},
+        {'name':'Flatten1', 'type':'Flatten', 'position':'hidden', 'config':{'data_format':'channels_last'}},
+        {'name': 'Dense1', 'type':'Dense', 'position':'output',  'config':{'units': 256, 'activation':'relu', 'kernel_regularizer':None}}, 
+        {'name':'Dropout2', 'type':'Dropout', 'position':'hidden', 'config':{'rate':0.5, 'noise_shape':None, 'seed':None}},
+        {'name': 'Dense2', 'type':'Dense', 'position':'output',  'config':{'units':n_classes, 'activation':'softmax'}}
+    ]}
 	   
 model_parameters = {
 				'MLAlgorithm':'NN',
 				'BatchSize':512,
 				'InputShape':InputShape,
-				'num_classes':2,
+				'num_classes':2, #change accordingly
 				'Epochs':10,
 				'metrics':['accuracy'],
-				'architecture':SimpleDFF_architecture
+				'architecture':SimpleDFF_architecture,
+                'Verbose':True
 				} 
 ```
+
 CatBoost
 ```python
 model_parameters = {
@@ -358,9 +372,47 @@ model_parameters = {
 					'Imbalanced':False,
 					'TaskType':'GPU',
 					'Processors':2,
-					'UseBestModel':True
+					'UseBestModel':True,
+                    'Verbose':True
+                    
 				}
 ```
+
+XGBoost
+```python
+model_parameters = {
+					'MLAlgorithm':'XGBST',
+					'NTrees': 500,
+					'MaxDepth':10,
+					'LearningRate':0.7,
+					'LossFunction':'binary:logistic',
+					'EvalMatrics':['auc', 'error'],
+					'Regularization': {'L1':0.0, 'L2' 1.0},
+					'SamplesRatioPerTree':0.8,
+                    'FeaturesRatioPerTree':1.0,
+					'Processors':2,
+					'EarlyStopAttempts':5,
+                    'Verbose':True
+				}
+```
+
+LightGBM
+```python
+model_parameters = {
+					'MLAlgorithm':'XGBST',
+					'NTrees': 500,
+					'MaxDepth':10,
+					'LearningRate':0.7,
+					'LossFunction':'binary:logistic',
+					'EvalMatrics':['auc', 'error'],
+					'Regularization': {'L1':0.0, 'L2' 1.0},
+					'SamplesRatioPerTree':0.8,
+                    'FeaturesRatioPerTree':1.0,
+					'Processors':2,
+					'EarlyStopAttempts':5,
+                    'Verbose':True
+				}
+```   
 
 ### Build Model
 ```python
@@ -482,11 +534,13 @@ Model Attributes
 model_attributes = {
 					'ModelID': None,   
 					'ModelType':'regression',
+                    'EnumerationType': None,
 					'ModelName': 'Income',
 					'Version':'0.1',
+                    'TrainingMethod': 'supervised'  
                    }
-```
-
+```                    
+                    
 ```python
 model_parameters = {
 					'MLAlgorithm':'RFREG', # 'RFREG'
@@ -823,10 +877,12 @@ ImagesDataFrame, input_shape = mltk.prepare_image_dataset_to_model(ImagesDataFra
 ```python
 sample_attributes = {'SampleDescription':'Image CLassification Example',
                     'NumClasses':NClasses,
+                    'ClassLabels':ClassLabels,
+                    'DataFormat':'image',
                     'RecordIdentifiers':identifierColumns,
                     'ModelDataStats':modelDataStats
-                    }
-
+                    }                        
+                        
 score_parameters = {'Edges':[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
                     'Percentiles':[0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0],
                     'Threshold':0.5,
@@ -840,22 +896,23 @@ score_parameters = {'Edges':[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0
 model_attributes = {
                     'ModelID': None,   
                     'ModelType':'classification',
-                    'ModelName': 'IncomeLevel',
+                    'EnumerationType': 'multi', # 'binary' 'mono' None
+                    'ModelName': 'ImageTest',
                     'Version':'0.1',
+                    'TrainingMethod': 'supervised' 
                    }
 				   
-architecture = {
-        'L1':{'type': 'Conv2D', 'position':'input', 'filters':32, 'kernel_size':(3,3), 'padding':'same', 'strides':(1,1), 'activation':'relu', 'input_shape':input_shape},
-        'L2':{'type': 'MaxPooling2D', 'pool_size': (2,2), 'padding':'same'},
-        'L3':{'type': 'Dropout', 'position':'hidden', 'rate':0.2},
-        'L4':{'type': 'Conv2D', 'position':'hidden', 'filters':64, 'kernel_size':(3,3), 'padding':'same', 'strides':(1,1), 'activation':'relu'},
-        'L5':{'type': 'MaxPooling2D', 'pool_size': (2,2), 'padding':'same'},
-        'L6':{'type': 'Dropout', 'position':'hidden', 'rate':0.2},
-        'L7':{'type': 'Flatten'},
-        'L8':{'type': 'Dense', 'position':'hidden', 'units': 256, 'activation':'softmax', 'output_shape':None},
-        'L9':{'type': 'Dropout', 'position':'hidden', 'rate':0.2},
-        'L10':{'type': 'Dense', 'position':'output', 'units': n_classes, 'activation':'softmax', 'output_shape':None},
-       }	
+architecture = {'layers': [
+        {'name':'Conv2D1', 'type':'Conv2D', 'position':'input', 'config':{'filters':32, 'kernel_size':(3,3), 'strides':None, 'padding':'same', 'activation':'relu', 'input_shape':input_shape, 'data_format':'channels_last'}},
+        {'name':'MaxPooling2D1', 'type':'MaxPooling2D', 'position':'hidden', 'config':{'pool_size':(2,2), 'strides':None, 'padding':'same', 'data_format':'channels_last'}},      
+        {'name':'Conv2D2', 'type':'Conv2D', 'position':'hidden', 'config':{'filters': 64, 'kernel_size': (3,3), 'strides':None, 'padding':'same', 'activation':'relu', 'data_format':'channels_last'}},
+        {'name':'MaxPooling2D2', 'type':'MaxPooling2D', 'position':'hidden', 'config':{'pool_size':(2,2), 'strides':None, 'padding':'same', 'data_format':'channels_last'}},       
+        {'name':'Dropout1', 'type':'Dropout', 'position':'hidden', 'config':{'rate':0.5, 'noise_shape':None, 'seed':None}},
+        {'name':'Flatten1', 'type':'Flatten', 'position':'hidden', 'config':{'data_format':'channels_last'}},
+        {'name': 'Dense1', 'type':'Dense', 'position':'output',  'config':{'units': 256, 'activation':'relu', 'kernel_regularizer':None}}, 
+        {'name':'Dropout2', 'type':'Dropout', 'position':'hidden', 'config':{'rate':0.5, 'noise_shape':None, 'seed':None}},
+        {'name': 'Dense2', 'type':'Dense', 'position':'output',  'config':{'units':n_classes, 'activation':'softmax'}}
+    ]}	
 
 model_parameters = {'MLAlgorithm':'CNN',
                     'BatchSize':128,
@@ -883,7 +940,7 @@ CNNModel.plot_eval_matrics()
 
 ## License
 ```
-Copyright 2019 Sumudu Tennakoon
+Copyright 2019-2020 Sumudu Tennakoon
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -902,11 +959,11 @@ limitations under the License.
 ```
 @misc{mltk2019,
   author =  "Sumudu Tennakoon",
-  title = "MLToolKit(mltk): A Simplified Toolkit for Unifying End-To-End Machine Learing Projects",
+  title = "MLToolKit(mltk): A Simplified Toolkit for Unifying End-To-End Machine Learning Projects",
   year = 2019,
   publisher = "GitHub",
   howpublished = {\url{https://mltoolkit.github.io/mltk/}},
-  version = "0.1.10",
+  version = "0.1.11",
   doi = "https://doi.org/10.5281/zenodo.3596163"
 }
 ```
@@ -924,20 +981,22 @@ limitations under the License.
 - 2019-09-28 [v0.1.8] : Improved Documentation, Enhancements and bug fixes.
 - 2019-12-07 [v0.1.9] : Added model explainability, Integrate image classification model Deployment, Enhancements and bug fixes.
 - 2019-12-31 [v0.1.10] : Improved data read write functions, Enhancements and bug fixes, Improved Documentation.
+- 2020-02-12 [v0.1.11] : Enhanced Support to Gradient Boosting and Neural Network algorithms, Bug fixes, Improved Documentation.
 
 ## Future Release Plan
-- TBD [v0.1.11] : Working with Imbalanced Samples, Integrate Cross-validation, Post additional tutorials and examples, Improve Documentation, Enhancements and bug fixes.
-- TBD [v0.1.12] : Building Ensamble Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
-- TBD [v0.1.13]: ML Model Building Projects, Enhancements and bug fixes.
-- 2019-12-31 [v0.1.14]:Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
-- TBD [v0.2.0]: Imporved model building and serving frameework and UI, Support more machine learning algorithms, Support multi-class classification and enhanced text analytics functions.
-- TBD [v0.3.0]: Imporved scalability and performance, Automated Machine Learning.
+- TBD [v0.1.x1] : Support multi-class classification, Improved Data Pre-processing, EDA/Data Profiling and Vizualization functions, Enhancements and bug fixes.
+- TBD [v0.1.x2] : Working with Imbalanced Samples, Integrate Cross-validation, Post additional tutorials and examples, Improve Documentation, Enhancements and bug fixes.
+- TBD [v0.1.x3] : Building Ensamble Models, UI Preview, Improved Feature Selection, Cross-validation and Hyper parameter tuning functionality, Enhancements and bug fixes.
+- TBD [v0.1.X5]: ML Model Building Projects, Enhancements and bug fixes.
+- 2019-12-31 [v0.1.x6]:Comprehensive documentation, Post implementation evaluation functions, Enhanced Data Input and Output functios, Major bug-fix version of the initial release with finalized enhancements.
+- TBD [v0.2.0]: Imporved model building and serving frameework and UI, Support more machine learning algorithms, Improved multi-class classification and enhanced text analytics functions.
+- TBD [v0.3.0]: Imporved scalability and performance, Automated Machine Learning, Integrate GUI.
 - TBD [v0.4.0]: Building continious learning models.
 
 ## Acknowledgement and Remarks
 Some functions of MLToolKit depends on number of Open Source Python Libraries such as
 - Data Manipulation : Pandas
-- Machine Learning: Statsmodels, Scikit-learn, Catboost
+- Machine Learning: Statsmodels, Scikit-learn, Catboost, XGBoost, LightGBM
 - Deep Learning: Tensorflow, 
 - Model Interpretability: Shap, Lime
 - Server Framework: Flask
@@ -954,17 +1013,19 @@ As a Free and Open Source initiative and a independent R&D project, author has n
 MLToolKit is set to evolve with adding more features and functionality, and interoperability with more standard data science and machine learning libraries. MLToolKit will always be available as Free and Open Source Python library in the future.
 
 ## References
-- https://pandas.pydata.org/
+- https://pandas.pydata.org
 - https://scikit-learn.org
-- https://www.tensorflow.org/
-- https://keras.io/layers/recurrent/
-- https://www.numpy.org/
+- https://www.tensorflow.org
+- https://keras.io
+- https://www.numpy.org
 - https://docs.python.org/3.6/library/re.html
 - https://www.statsmodels.org
-- https://matplotlib.org/
-- http://flask.pocoo.org/
-- https://catboost.ai/
+- https://matplotlib.org
+- http://flask.pocoo.org
+- https://catboost.ai
+- https://xgboost.readthedocs.io
+- https://lightgbm.readthedocs.io
 - https://github.com/slundberg/shap
 - https://github.com/marcotcr/lime
-- http://json.org/
-- https://pillow.readthedocs.io/en/stable/
+- http://json.org
+- https://pillow.readthedocs.io
