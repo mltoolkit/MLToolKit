@@ -126,22 +126,51 @@ def score_processed_dataset(DataFrame, Model, edges=None, score_label=None, scor
         print('Test Samples: {} loded...'.format(x_test.shape[0]))
     
     ml_algorithm = Model.model_parameters['MLAlgorithm']    
-
-    if ml_algorithm=='LREG':
-        y_pred_prob = Model.model_object.predict(x_test)  
-    elif ml_algorithm=='RFREG':
-        y_pred_prob = Model.model_object.predict(x_test) 
-    elif ml_algorithm=='LGR':
-        y_pred_prob = Model.model_object.predict(x_test)
-    elif ml_algorithm=='RF':        
-        y_pred_prob = Model.model_object.predict_proba(x_test)[:,1]
-    elif ml_algorithm=='NN':     
-        batch_size=Model.model_parameters['BatchSize']
-        y_pred_prob = Model.model_object.predict(x_test, verbose=1, batch_size=batch_size)[:,1]
-    elif ml_algorithm=='CBST':     
-        y_pred_prob = Model.model_object.predict_proba(x_test, verbose=True)[:,1]
+    model_type = Model.model_attributes['ModelType']
+    if model_type=='classification':
+        target_class = Model.score_parameters['TargetClass']
+        class_labels_map = Model.sample_attributes['ClassLabelsMap'] 
         
-    DataFrame[score_variable] = y_pred_prob
+    try:    
+        verbose = model_parameters['Verbose']
+    except:
+        verbose = True    
+    
+    if model_type == 'classification':
+        if ml_algorithm=='LGR':
+            y_pred_prob = Model.model_object.predict(x_test)
+            DataFrame[score_variable] = y_pred_prob 
+        elif ml_algorithm=='RF':        
+            y_pred_prob = Model.model_object.predict_proba(x_test).T
+            DataFrame[score_variable] = y_pred_prob[1] # For Classification
+        elif ml_algorithm=='NN':     
+            batch_size=Model.model_parameters['BatchSize']
+            y_pred_prob = Model.model_object.predict(x_test, verbose=int(verbose), batch_size=batch_size).T
+            DataFrame[score_variable] = y_pred_prob[1] # For Classification
+        elif ml_algorithm=='CBST':     
+            y_pred_prob = Model.model_object.predict_proba(x_test, verbose=verbose).T
+            DataFrame[score_variable] = y_pred_prob[1] # For Classification
+        elif ml_algorithm=='XGBST':     
+            y_pred_prob = Model.model_object.predict_proba(x_test, verbose=verbose).T
+            DataFrame[score_variable] = y_pred_prob[1] # For Classification
+        elif ml_algorithm=='LGBM':     
+            y_pred_prob = Model.model_object.predict_proba(x_test, verbose=int(verbose)).T            
+            DataFrame[score_variable] = y_pred_prob[1] # For Classification      
+        
+        if ml_algorithm!='LGR':
+            for i in range(len(y_pred_prob)): # ADDED TO SUPPORT MULTI-CLASS CLASSIFICATION (Need to cleanup this output/ remove redundent target class column)
+                #print('{}_{}'.format(score_variable,i)) 
+                DataFrame['{}_{}'.format(score_variable,i)] = y_pred_prob[i]
+    elif model_type == 'regression':
+        if ml_algorithm=='LREG':
+            y_pred_prob = Model.model_object.predict(x_test)  
+            DataFrame[score_variable] = y_pred_prob # For Regression
+        elif ml_algorithm=='RFREG':
+            y_pred_prob = Model.model_object.predict(x_test) 
+            DataFrame[score_variable] = y_pred_prob # For Regression
+    else:
+        print('ML Algorith not supported')
+                
     DataFrame = score(DataFrame, score_variable=score_variable, edges=edges, score_label=score_label)
         
     DataFrame = set_predicted_column(DataFrame, score_variable=score_variable, threshold=threshold, predicted_label=predicted_label, fill_missing=0)

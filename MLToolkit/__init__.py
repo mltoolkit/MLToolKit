@@ -4,12 +4,12 @@
 __docformat__ = 'restructuredtext'
 __name__="mltk"
 __distname__="pymltoolkit"
-__version__="0.1.10"
+__version__="0.1.11"
 __description__= 'End-to-end Machine Learning Toolkit (MLToolkit/mltk) for Python'
 __author__="Sumudu Tennakoon"
 __url__="https://mltoolkit.github.io/MLToolKit"
 __create_date__="Sun Jul 01 2018"
-__last_update__="Tue Dec 31 2019"
+__last_update__="Wed Feb 12 2020"
 __license__="""
 Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
 """
@@ -50,7 +50,10 @@ Depedancies
 - Statsmodels
 - Scikit-learn
 - Catboost
+- XGBoost
+- LightGBM
 - Tensorflow
+- Keras
 - Shap
 - Lime
 - Flask
@@ -106,7 +109,7 @@ from mltk.datatools import *
 message = """
 Some functions of MLToolKit depends on number of Open Source Python Libraries such as
 - Data Manipulation : Pandas
-- Machine Learning: Statsmodels, Scikit-learn, Catboost
+- Machine Learning: Statsmodels, Scikit-learn, Catboost, XGboost, LightGBM
 - Deep Learning: Tensorflow, 
 - Model Interpretability: Shap, Lime
 - Server Framework: Flask

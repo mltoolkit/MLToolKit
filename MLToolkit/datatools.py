@@ -70,7 +70,8 @@ def print_data_resource_execute_format(): # Generate given use case (e.g. For SQ
         },
         'structure_parameters' : {
             'columns' : None,
-            'index' : False, 
+            'index' : False,
+            'header': 'infer',
             'partition_columns': None, # For parquet  Ref: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_parquet.html
             'orient' : None, # For JSON {'records', 'index', 'split} # Ref: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_json.html
         },
@@ -105,7 +106,7 @@ def print_data_resource_execute_format(): # Generate given use case (e.g. For SQ
             'complevel' : 0, # for HDF                     
             'protocol' : -1  # Pickle https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_pickle.html#pandas.DataFrame.to_pickle
         }
-    }	
+    }
 
     print('data_connector =', data_connector)
     print('data_object =', data_object)
@@ -142,7 +143,7 @@ def set_field_value(value, default=None):
     try:
         return value
     except:
-        return default	
+        return default
 
 def get_field_value(fields_dict, key1=None, key2=None, default=None):
     """
@@ -201,6 +202,7 @@ def read_data(query=None, data_connector=None, data_object =None, execute_params
     #
     columns  = get_field_value(data_object, 'structure_parameters','columns', default=None)
     index  = get_field_value(data_object, 'structure_parameters','index', default=False)
+    header = get_field_value(data_object, 'structure_parameters','header', default='infer')
     partition_columns  = get_field_value(data_object, 'structure_parameters','partition_columns', default=None)
     orient  = get_field_value(data_object, 'structure_parameters','orient', default= 'records')
     #
@@ -266,6 +268,7 @@ def read_data(query=None, data_connector=None, data_object =None, execute_params
             mode=mode, 
             start=start, 
             stop=stop, 
+            header=header,
             columns=columns, 
             on_error=on_error
             )
@@ -328,6 +331,7 @@ def write_data(DataFrame=None, data_connector=None, data_object =None, execute_p
     #
     columns  = get_field_value(data_object, 'structure_parameters','columns', default=None)
     index  = get_field_value(data_object, 'structure_parameters','index', default=False)
+    header = get_field_value(data_object, 'structure_parameters','header', default=True)
     partition_columns  = get_field_value(data_object, 'structure_parameters','partition_columns', default=None)
     orient  = get_field_value(data_object, 'structure_parameters','orient', default= 'records')
     #
@@ -383,6 +387,8 @@ def write_data(DataFrame=None, data_connector=None, data_object =None, execute_p
             file=file_path, 
             separator=separator, 
             index=index, 
+            header=header,
+            columns=columns,
             quoting=quoting, 
             encoding=encoding, 
             compression=compression, 
@@ -1171,8 +1177,9 @@ def write_data_mssql(DataFrame, server=None, database=None, schema=None, table=N
     else:
         return rowcount
 
-def read_data_csv(file, separator=',', quoting= 'MINIMAL', compression='infer', encoding='utf-8', 
-                  on_error='ignore', return_time=False):
+def read_data_csv(file, separator=',', quoting= 'MINIMAL', compression='infer', 
+                    header='infer', columns=None, encoding='utf-8', on_error='ignore', 
+                    return_time=False):
     """
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_csv.html
     
@@ -1183,6 +1190,8 @@ def read_data_csv(file, separator=',', quoting= 'MINIMAL', compression='infer', 
     index : bool
     compression : {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default 'infer'
     quoting : {'ALL', MINIMAL', 'NONNUMERIC', 'NONE'}, default 'MINIMAL'
+    header : int, list of int, None, default 'infer'
+    columns : list(str)
     encoding : {'utf-8', 'utf-16'}, default 'utf-8'
     on_error : {None, 'ignore', 'raise'}, default 'ignore'
     return_time : bool
@@ -1203,7 +1212,8 @@ def read_data_csv(file, separator=',', quoting= 'MINIMAL', compression='infer', 
     try:
         start_time = timer() 
         DataFrame = pd.read_csv(filepath_or_buffer=file, sep=separator, quoting=quoting, 
-                                compression=compression, encoding=encoding)  
+                                compression=compression, header=header, names=columns,
+                                encoding=encoding)  
         execute_time = timer() - start_time
         rowcount = len(DataFrame.index)
     except:
@@ -1220,8 +1230,9 @@ def read_data_csv(file, separator=',', quoting= 'MINIMAL', compression='infer', 
     else:
         return DataFrame
 
-def write_data_csv(DataFrame, file, separator=',', index=False, quoting='ALL', encoding='utf-8', 
-                   compression='infer', chunksize=None, on_error='ignore', return_time=False):
+def write_data_csv(DataFrame, file, separator=',', index=False, quoting='ALL', 
+                    header='infer', columns=None, encoding='utf-8', compression='infer', 
+                    chunksize=None, on_error='ignore', return_time=False):
     """
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.to_csv.html
     
@@ -1233,6 +1244,8 @@ def write_data_csv(DataFrame, file, separator=',', index=False, quoting='ALL', e
     index : bool
     compression : {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default 'infer'
     quoting : {'ALL', MINIMAL', 'NONNUMERIC', 'NONE'}, default 'MINIMAL'
+    header : bool or list of str, default True
+    columns : list(str)
     encoding : {'utf-8', 'utf-16'}, default 'utf-8'
     chunksize : int, default None
     on_error : {None, 'ignore', 'raise'}, default 'ignore'
@@ -1254,7 +1267,8 @@ def write_data_csv(DataFrame, file, separator=',', index=False, quoting='ALL', e
     try:
         start_time = timer()     
         DataFrame.to_csv(path_or_buf=file, sep=separator, encoding=encoding, index=index, 
-                         quoting=quoting, compression=compression, chunksize=chunksize)
+                         header=header, names=columns, quoting=quoting, compression=compression, 
+                         chunksize=chunksize)
         execute_time = timer() - start_time
         rowcount = len(DataFrame.index)
     except:

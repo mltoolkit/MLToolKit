@@ -517,7 +517,8 @@ def build_logit_model(x_train, y_train, model_variables, target_variable, model_
         
     return model, output, model_fit_time
 
-def stack_tf_layers_sequential(architecture, print_summary=False):
+###############################################################################
+def stack_nn_layers_tf(architecture, print_summary=False):
     """
     Parameters
     ----------
@@ -532,6 +533,80 @@ def stack_tf_layers_sequential(architecture, print_summary=False):
         Keras Sequential model object
     """
     
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import Dense, Dropout, Conv2D, MaxPooling2D, MaxPooling1D, Flatten
+    from keras import regularizers
+
+    def set_default_param(config, param, default=None):    
+        if param not in config:
+            config.update({param:default})
+        else:
+            if param in ('kernel_regularizer', 'bias_regularizer', 'activity_regularizer'):
+                l1 = config[param]['l1'] if ('l1' in config) else 0.0
+                l2 = config[param]['l2'] if ('l2' in config) else 0.0 
+                config[param] = regularizers.l1_l2(l1=l1, l2=l2)
+        return config
+    
+    model = Sequential()
+    
+    for layer in architecture['layers']:
+        try:
+            layer['class_name'] = layer['type']
+        except:
+            pass
+        try:
+            layer['config']['name'] = layer['name']
+        except:
+            pass        
+        config = layer['config']
+        config = set_default_param(config, param='name', default=None)
+        config = set_default_param(config, param='strides', default=None)
+        config = set_default_param(config, param='padding', default='valid') 
+        config = set_default_param(config, param='data_format', default=None) 
+        config = set_default_param(config, param='kernel_regularizer', default=None) 
+        config = set_default_param(config, param='bias_regularizer', default=None) 
+        config = set_default_param(config, param='activity_regularizer', default=None)
+        
+        if layer['class_name'] in ('Conv1D', 'Conv2D', 'Conv3D') and config['strides']==None:
+            config['strides'] = 1 #Set to default value
+        
+        if layer['class_name']=='Dense':
+            if layer['position']=='input':
+                model.add(Dense(name=config['name'], units=config['units'], activation=config['activation'], input_shape=config['input_shape'], kernel_regularizer=config['kernel_regularizer'], activity_regularizer=config['activity_regularizer'], bias_regularizer=config['bias_regularizer']))
+            else:
+                model.add(Dense(name=config['name'], units=config['units'], activation=config['activation'], kernel_regularizer=config['kernel_regularizer'], activity_regularizer=config['activity_regularizer'], bias_regularizer=config['bias_regularizer']))
+        elif layer['class_name']=='Dropout': 
+             model.add(Dropout(name=config['name'], rate=config['rate']))   
+        elif layer['class_name']=='Conv2D':
+            if layer['position']=='input':
+                model.add(Conv2D(name=config['name'], filters=config['filters'], kernel_size=config['kernel_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format'], activation=config['activation'], input_shape=config['input_shape'],  kernel_regularizer=config['kernel_regularizer'], activity_regularizer=config['activity_regularizer'], bias_regularizer=config['bias_regularizer'])) 
+            elif layer['position']=='hidden':
+                model.add(Conv2D(name=config['name'], filters=config['filters'], kernel_size=config['kernel_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format'], activation=config['activation'], kernel_regularizer=config['kernel_regularizer'], activity_regularizer=config['activity_regularizer'], bias_regularizer=config['bias_regularizer']))
+        elif layer['class_name']=='MaxPooling2D':
+                model.add(MaxPooling2D(name=config['name'], pool_size=config['pool_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format']))
+        elif layer['class_name']=='Conv1D':
+            if layer['position']=='input':
+                model.add(Conv1D(name=config['name'], filters=config['filters'], kernel_size=config['kernel_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format'], activation=config['activation'], input_shape=config['input_shape'], kernel_regularizer=config['kernel_regularizer'], activity_regularizer=config['activity_regularizer'], bias_regularizer=config['bias_regularizer'])) 
+            else:
+                model.add(Conv1D(name=config['name'], filters=config['filters'], kernel_size=config['kernel_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format'], activation=config['activation'], kernel_regularizer=config['kernel_regularizer'], activity_regularizer=config['activity_regularizer'], bias_regularizer=config['bias_regularizer']))
+        elif layer['class_name']=='MaxPooling1D':
+                model.add(MaxPooling1D(name=config['name'], pool_size=config['pool_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format']))
+        elif layer['class_name']=='Conv3D':
+            if layer['position']=='input':
+                model.add(Conv3D(name=config['name'], filters=config['filters'], kernel_size=config['kernel_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format'], activation=config['activation'], input_shape=config['input_shape'], kernel_regularizer=config['kernel_regularizer'], activity_regularizer=config['activity_regularizer'], bias_regularizer=config['bias_regularizer'])) 
+            else:
+                model.add(Conv3D(name=config['name'], filters=config['filters'], kernel_size=config['kernel_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format'], activation=config['activation'], kernel_regularizer=config['kernel_regularizer'], activity_regularizer=config['activity_regularizer'], bias_regularizer=config['bias_regularizer']))
+        elif layer['class_name']=='MaxPooling3D':
+                model.add(MaxPooling3D(name=config['name'], pool_size=config['pool_size'], strides=config['strides'], padding=config['padding'], data_format=config['data_format']))
+        elif layer['class_name']=='Flatten':
+                model.add(Flatten(name=config['name'], data_format=config['data_format']))
+    
+    if print_summary:
+        print(model.summary())
+                
+    return model
+
+def stack_nn_layers_tf_depreciate_in_0_2_0(architecture, print_summary=False):
     from tensorflow.keras.models import Sequential
     from tensorflow.keras.layers import Dense, Dropout, Conv2D, MaxPooling2D, MaxPooling1D, Flatten
     
@@ -563,6 +638,14 @@ def stack_tf_layers_sequential(architecture, print_summary=False):
         model.summary()
                 
     return model
+
+def stack_nn_layers(architecture, print_summary=False):
+    architecture_ = copy.deepcopy(architecture)
+    try:
+        return stack_nn_layers_tf(architecture_, print_summary=print_summary)
+    except:
+        return stack_nn_layers_tf_depreciate_in_0_2_0(architecture_, print_summary=print_summary)
+###############################################################################
     
 def build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters):
     """
@@ -602,7 +685,7 @@ def build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, ta
     
     ###########################################################################    
     print('Input shape:', x_train.shape)
-    model = stack_tf_layers_sequential(architecture)
+    model = stack_nn_layers(architecture)
     model.summary()  
     ###########################################################################
     
@@ -632,6 +715,21 @@ def build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, ta
     
     
 def build_rf_model(x_train, y_train, model_variables, target_variable, model_parameters):
+    """
+    Parameters
+    ----------
+    x_train : np.array
+    y_train : np.array
+    model_variables : list(str)
+    target_variable : str
+    model_parameters : dict
+    
+    Returns
+    -------
+    model : mltk.MLModel
+    output : dict
+    model_fit_time : float
+    """
     from sklearn.ensemble import RandomForestClassifier
     
     try:
@@ -657,8 +755,21 @@ def build_rf_model(x_train, y_train, model_variables, target_variable, model_par
 
 def build_cbst_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters):
     """
+    Parameters
+    ----------
+    x_train : np.array
+    y_train : np.array
+    model_variables : list(str)
+    target_variable : str
+    model_parameters : dict
     
+    Returns
+    -------
+    model : mltk.MLModel
+    output : dict
+    model_fit_time : float
     """
+    
     import catboost
     from catboost import CatBoostClassifier, Pool
     import numpy as np
@@ -706,6 +817,149 @@ def build_cbst_model(x_train, y_train, x_validate, y_validate, model_variables, 
        
     return model, output, model_fit_time        
 
+def build_xgbst_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters):
+    """
+    Parameters
+    ----------
+    x_train : np.array
+    y_train : np.array
+    model_variables : list(str)
+    target_variable : str
+    model_parameters : dict
+    
+    Returns
+    -------
+    model : mltk.MLModel
+    output : dict
+    model_fit_time : float
+    https://xgboost.readthedocs.io/en/latest/python/python_api.html
+    """
+    
+    import xgboost
+    from xgboost import XGBClassifier
+    import numpy as np
+    
+    # Performance enhanced data structure
+    #data_dmatrix = xgboost.DMatrix(data=x_train, label=y_train)
+
+    # Model Params 
+    num_trees = model_parameters['NTrees'] #n_estimators
+    depth = model_parameters['MaxDepth'] #max_depth
+    learning_rate = model_parameters['LearningRate'] 
+    loss_function = model_parameters['LossFunction'] #objective
+    eval_metric = model_parameters['EvalMatrics'] #eval_metric
+    early_stopping_rounds = model_parameters['EarlyStopAttempts']
+    samples_per_tree = model_parameters['SamplesRatioPerTree'] #subsample
+    features_per_tree = model_parameters['FeaturesRatioPerTree'] #colsample_bytree
+    #gamma = model_parameters['Gamma'] 
+    l1 = model_parameters['Regularization']['L1'] #alpha (L1 regularization on leaf weights)
+    l2 = model_parameters['Regularization']['L2'] #lambda (L2 regularization on leaf weights)
+    verbose = model_parameters['Verbose'] 
+    
+    model = XGBClassifier(objective=loss_function, 
+                          n_estimators=num_trees,
+                          max_depth=depth,                               
+                          learning_rate=learning_rate,
+                          eval_metric=eval_metric,
+                          verbose=verbose)    
+    #imbalanced = model_parameters['Imbalanced']
+    # 
+    #task_type = model_parameters['TaskType']
+    #thread_count = model_parameters['Processors'] 
+    #use_best_model = model_parameters['UseBestModel'] 
+    #verbose=int((num_trees+9)/10)
+
+    #if imbalanced==True:
+    #    sample_size = len(y_train)
+    #    actual_positives = np.sum(y_train)
+    #    actual_negatives= sample_size-actual_positives
+    #    scale_pos_weight = (1.0)*actual_negatives/actual_positives
+    #else:
+    #    scale_pos_weight=1.0
+    
+    startTime = timer()
+    model.fit(x_train, y_train, eval_set=(x_validate, y_validate), early_stopping_rounds=early_stopping_rounds)
+    model_fit_time = timer() - startTime
+
+    Importances = model.feature_importances_
+    #stdev = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)    
+    output = pd.DataFrame({'Features':model_variables, 'Importances':Importances}).sort_values(by='Importances', ascending=False)        #, 'stdev':stdev
+    
+    score = model.score(x_validate, y_validate)
+    print('Test accuracy:', score)
+       
+    return model, output, model_fit_time
+
+def build_lgbm_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters):
+    """
+    Parameters
+    ----------
+    x_train : np.array
+    y_train : np.array
+    model_variables : list(str)
+    target_variable : str
+    model_parameters : dict
+    
+    Returns
+    -------
+    model : mltk.MLModel
+    output : dict
+    model_fit_time : float
+    https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMModel.html#lightgbm.LGBMModel
+    """
+    
+    import lightgbm 
+    from lightgbm  import LGBMClassifier
+    import numpy as np
+
+    # Model Params 
+    num_trees = model_parameters['NTrees'] #n_estimators
+    depth = model_parameters['MaxDepth'] #max_depth
+    learning_rate = model_parameters['LearningRate'] 
+    loss_function = model_parameters['LossFunction'] #objective
+    eval_metric = model_parameters['EvalMatrics'] #eval_metric
+    early_stopping_rounds = model_parameters['EarlyStopAttempts']
+    samples_per_tree = model_parameters['SamplesRatioPerTree'] #subsample
+    features_per_tree = model_parameters['FeaturesRatioPerTree'] #colsample_bytree
+    l1 = model_parameters['Regularization']['L1'] #alpha (L1 regularization on leaf weights)
+    l2 = model_parameters['Regularization']['L2'] #lambda (L2 regularization on leaf weights)
+    thread_count = model_parameters['Processors']  #n_jobs 
+    verbose = model_parameters['Verbose'] 
+    
+    model = LGBMClassifier(objective=loss_function, 
+                          n_estimators=num_trees,
+                          max_depth=depth,                               
+                          learning_rate=learning_rate,
+                          eval_metric=eval_metric,
+                          n_jobs=thread_count)    
+    #imbalanced = model_parameters['Imbalanced']
+    # 
+    #task_type = model_parameters['TaskType']
+    
+    #use_best_model = model_parameters['UseBestModel'] 
+    #verbose=int((num_trees+9)/10)
+
+    #if imbalanced==True:
+    #    sample_size = len(y_train)
+    #    actual_positives = np.sum(y_train)
+    #    actual_negatives= sample_size-actual_positives
+    #    scale_pos_weight = (1.0)*actual_negatives/actual_positives
+    #else:
+    #    scale_pos_weight=1.0
+    
+    startTime = timer()
+    model.fit(x_train, y_train, eval_set=(x_validate, y_validate), early_stopping_rounds=early_stopping_rounds, verbose=verbose)
+    model_fit_time = timer() - startTime
+
+    Importances = model.feature_importances_
+    #stdev = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)    
+    output = pd.DataFrame({'Features':model_variables, 'Importances':Importances}).sort_values(by='Importances', ascending=False)        #, 'stdev':stdev
+    
+    score = model.score(x_validate, y_validate)
+    print('Test accuracy:', score)
+       
+    return model, output, model_fit_time
+    
 def model_dataset_to_array(Dataset, model_variables, target_variable, is_image_data=False):
     """
     TO DO: Find a more robust solution for this
@@ -760,11 +1014,24 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     score_parameters = copy.deepcopy(score_parameters)
     ###############################################################################
     ml_algorithm = model_parameters['MLAlgorithm']
-    if ml_algorithm == 'CNN':
+    model_type = model_attributes['ModelType']
+    data_format = sample_attributes['DataFormat']
+    
+    if data_format=='image' or ml_algorithm=='CNN': # "ml_algorithm=='CNN'" WILL DEPRECIATE IN v0.2.0
         is_image_data = True
     else:
         is_image_data = False
     ###############################################################################
+    if model_type=='classification':
+        target_class = score_parameters['TargetClass']
+        class_labels_map = sample_attributes['ClassLabelsMap'] 
+        model_parameters['NumClasses'] = len(class_labels_map.keys())
+    try:    
+        verbose = model_parameters['Verbose']
+    except:
+        verbose = True
+    ###############################################################################
+    
     # TRAIN DATASET
     x_train, y_train, y_train_act = model_dataset_to_array(TrainDataset, 
                                                            model_variables, 
@@ -829,96 +1096,145 @@ def build_ml_model(TrainDataset, ValidateDataset, TestDataset, model_variables, 
     ###############################################################################
     
     # Model fit routine selection
+    if model_type == 'classification':
+        if ml_algorithm=='LGR':
+            ###############################################################################
+            import statsmodels
+            model_attributes['MLTool'] = 'statsmodels={}'.format(statsmodels.__version__) 
+            # Logit Model
+            model, summary, model_fit_time = build_logit_model(x_train, y_train, model_variables, target_variable, model_parameters)
+            model_interpretation['ModelSummary'] = summary    
+
+    #        y_pred_prob = model.predict(x_validate)
+    #        ValidateDataset[score_variable]=y_pred_prob
+            
+            y_pred_prob = model.predict(x_test)
+            TestDataset[score_variable]=y_pred_prob
+            ###############################################################################    
+        elif ml_algorithm=='RF':
+            ###############################################################################
+            import sklearn
+            model_attributes['MLTool'] = 'sklearn={}'.format(sklearn.__version__) 
+            # Random Forest Model
+            model, summary, model_fit_time= build_rf_model(x_train, y_train, model_variables, target_variable, model_parameters)
+            model_interpretation['ModelSummary'] = summary  
+            
+    #        y_pred_prob = model.predict(x_validate)
+    #        ValidateDataset[score_variable]=y_pred_prob
+            
+            y_pred_prob = model.predict_proba(x_test).T #[:,1] 
+            TestDataset[score_variable]=y_pred_prob[1]
+            
+            for i in range(len(y_pred_prob)): # ADDED TO SUPPORT MULTI-CLASS CLASSIFICATION
+                print('{}_{}'.format(score_variable,i)) 
+                TestDataset['{}_{}'.format(score_variable,i)] = y_pred_prob[i]
+            ###############################################################################
+            
+        elif ml_algorithm in ['NN', 'CNN']:
+            ###############################################################################
+            import tensorflow
+            import tensorflow.keras
+            model_attributes['MLTool'] = 'tensorflow={}; keras={}'.format(tensorflow.__version__, tensorflow.keras.__version__) 
+            # Deep Feed Forward Model using TensorFlow
+            model, summary, model_fit_time= build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters)
+            model_interpretation['ModelSummary'] = summary  
+            
+    #        y_pred_prob = model.predict(x_validate)
+    #        ValidateDataset[score_variable]=y_pred_prob
+            
+            y_pred_prob = model.predict(x_test, verbose=int(verbose), batch_size=model_parameters['BatchSize']).T #[:,1] 
+            TestDataset[score_variable]=y_pred_prob[1]
+            
+            for i in range(len(y_pred_prob)): # ADDED TO SUPPORT MULTI-CLASS CLASSIFICATION
+                #print('{}_{}'.format(score_variable,i)) 
+                TestDataset['{}_{}'.format(score_variable,i)] = y_pred_prob[i]
+                
+            ###############################################################################   
+        elif ml_algorithm=='CBST':
+            ###############################################################################
+            import catboost
+            model_attributes['MLTool'] = 'catboost={}'.format(catboost.__version__)  
+            # Cat Boost Model
+            model, summary, model_fit_time= build_cbst_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters)
+            model_interpretation['ModelSummary'] = summary  
+            
+            y_pred_prob = model.predict_proba(x_test, verbose=verbose, thread_count=model_parameters['Processors']).T #[:,1]           
+            TestDataset[score_variable]=y_pred_prob[1]
+            
+            for i in range(len(y_pred_prob)): # ADDED TO SUPPORT MULTI-CLASS CLASSIFICATION
+                print('{}_{}'.format(score_variable,i)) 
+                TestDataset['{}_{}'.format(score_variable,i)] = y_pred_prob[i]
     
-    if ml_algorithm=='LREG':
-        ###############################################################################
-        import statsmodels
-        model_attributes['MLTool'] = 'statsmodels={}'.format(statsmodels.__version__) 
-        # Logit Model
-        model, summary, model_fit_time = build_regression_model(x_train, y_train, model_variables, target_variable, model_parameters)
-        model_interpretation['ModelSummary'] = summary    
+            ###############################################################################
+        elif ml_algorithm=='XGBST':
+            ###############################################################################
+            import xgboost
+            model_attributes['MLTool'] = 'xgboost={}'.format(xgboost.__version__) 
+            # Cat Boost Model
+            model, summary, model_fit_time= build_xgbst_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters)
+            model_interpretation['ModelSummary'] = summary  
+            
+            y_pred_prob = model.predict_proba(x_test, verbose=True, thread_count=model_parameters['Processors']).T #[:,1] 
+            TestDataset[score_variable]=y_pred_prob[1]
+            
+            for i in range(len(y_pred_prob)): # ADDED TO SUPPORT MULTI-CLASS CLASSIFICATION
+                print('{}_{}'.format(score_variable,i)) 
+                TestDataset['{}_{}'.format(score_variable,i)] = y_pred_prob[i]
+                
+            ###############################################################################
+        elif ml_algorithm=='LGBM':
+            ###############################################################################
+            import lightgbm
+            model_attributes['MLTool'] = 'lightgbm={}'.format(lightgbm.__version__) 
+            # Cat Boost Model
+            model, summary, model_fit_time= build_lgbm_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters)
+            model_interpretation['ModelSummary'] = summary  
+            
+            y_pred_prob = model.predict_proba(x_test, verbose=int(verbose), thread_count=model_parameters['Processors']).T #[:,1] 
+            TestDataset[score_variable]=y_pred_prob[1]
+            
+            for i in range(len(y_pred_prob)): # ADDED TO SUPPORT MULTI-CLASS CLASSIFICATION
+                print('{}_{}'.format(score_variable,i)) 
+                TestDataset['{}_{}'.format(score_variable,i)] = y_pred_prob[i]
+            ###############################################################################
+        else:
+            raise Exception('No Classification MLAlgorithm is specified in the model_parameters!')
+        
+    elif model_type == 'regression':
+        if ml_algorithm=='LREG':
+            ###############################################################################
+            import statsmodels
+            model_attributes['MLTool'] = 'statsmodels={}'.format(statsmodels.__version__) 
+            # Logit Model
+            model, summary, model_fit_time = build_regression_model(x_train, y_train, model_variables, target_variable, model_parameters)
+            model_interpretation['ModelSummary'] = summary    
 
-#        y_pred_prob = model.predict(x_validate)
-#        ValidateDataset[score_variable]=y_pred_prob
-        
-        y_pred = model.predict(x_test)
-        TestDataset[score_variable] = y_pred
-        ###############################################################################
+    #        y_pred_prob = model.predict(x_validate)
+    #        ValidateDataset[score_variable]=y_pred_prob
+            
+            y_pred = model.predict(x_test)
+            TestDataset[score_variable] = y_pred
+            ###############################################################################
 
-    elif ml_algorithm=='RFREG':
-        ###############################################################################
-        import sklearn
-        model_attributes['MLTool'] = 'sklearn={}'.format(sklearn.__version__) 
-        # Random Forest Model
-        model, summary, model_fit_time= build_regression_model(x_train, y_train, model_variables, target_variable, model_parameters)
-        model_interpretation['ModelSummary'] = summary  
-        
-#        y_pred_prob = model.predict(x_validate)
-#        ValidateDataset[score_variable]=y_pred_prob
-        
-        y_pred = model.predict(x_test)
-        TestDataset[score_variable] = y_pred
-        ###############################################################################
-        
-    elif ml_algorithm=='LGR':
-        ###############################################################################
-        import statsmodels
-        model_attributes['MLTool'] = 'statsmodels={}'.format(statsmodels.__version__) 
-        # Logit Model
-        model, summary, model_fit_time = build_logit_model(x_train, y_train, model_variables, target_variable, model_parameters)
-        model_interpretation['ModelSummary'] = summary    
+        elif ml_algorithm=='RFREG':
+            ###############################################################################
+            import sklearn
+            model_attributes['MLTool'] = 'sklearn={}'.format(sklearn.__version__) 
+            # Random Forest Model
+            model, summary, model_fit_time= build_regression_model(x_train, y_train, model_variables, target_variable, model_parameters)
+            model_interpretation['ModelSummary'] = summary  
+            
+    #        y_pred_prob = model.predict(x_validate)
+    #        ValidateDataset[score_variable]=y_pred_prob
+            
+            y_pred = model.predict(x_test)
+            TestDataset[score_variable] = y_pred
+            ###############################################################################
+        else:
+            raise Exception('No Regression MLAlgorithm is specified in the model_parameters!')
 
-#        y_pred_prob = model.predict(x_validate)
-#        ValidateDataset[score_variable]=y_pred_prob
         
-        y_pred_prob = model.predict(x_test)
-        TestDataset[score_variable]=y_pred_prob
-        ###############################################################################
-        
-    elif ml_algorithm=='RF':
-        ###############################################################################
-        import sklearn
-        model_attributes['MLTool'] = 'sklearn={}'.format(sklearn.__version__) 
-        # Random Forest Model
-        model, summary, model_fit_time= build_rf_model(x_train, y_train, model_variables, target_variable, model_parameters)
-        model_interpretation['ModelSummary'] = summary  
-        
-#        y_pred_prob = model.predict(x_validate)
-#        ValidateDataset[score_variable]=y_pred_prob
-        
-        y_pred_prob = model.predict_proba(x_test)[:,1]
-        TestDataset[score_variable]=y_pred_prob
-        ###############################################################################
-        
-    elif ml_algorithm in ['NN', 'CNN']:
-        ###############################################################################
-        import tensorflow
-        import tensorflow.keras
-        model_attributes['MLTool'] = 'tensorflow={}; keras={}'.format(tensorflow.__version__, tensorflow.keras.__version__) 
-        # Deep Feed Forward Model using TensorFlow
-        model, summary, model_fit_time= build_nn_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters)
-        model_interpretation['ModelSummary'] = summary  
-        
-#        y_pred_prob = model.predict(x_validate)
-#        ValidateDataset[score_variable]=y_pred_prob
-        
-        y_pred_prob = model.predict(x_test, verbose=1, batch_size=model_parameters['BatchSize'])[:,1]
-        TestDataset[score_variable]=y_pred_prob
-        ###############################################################################   
-    elif ml_algorithm=='CBST':
-        ###############################################################################
-        import catboost
-        model_attributes['MLTool'] = 'catboost={}'.format(catboost.__version__) 
-        # Cat Boost Model
-        model, summary, model_fit_time= build_cbst_model(x_train, y_train, x_validate, y_validate, model_variables, target_variable, model_parameters)
-        model_interpretation['ModelSummary'] = summary  
-        
-        y_pred_prob = model.predict_proba(x_test, verbose=True, thread_count=model_parameters['Processors'])[:,1]
-        
-        TestDataset[score_variable]=y_pred_prob
-        ###############################################################################
-    else:
-        raise Exception('No ML Algorithm is given!')
+
     
     model_attributes['ModelFitTime'] = model_fit_time
     ############################################################################### 
